@@ -55,6 +55,7 @@ OVN_IPFIX_TARGETS=""
 OVN_HOST_NETWORK_NAMESPACE=""
 OVN_EX_GW_NETWORK_INTERFACE=""
 OVNKUBE_NODE_MGMT_PORT_NETDEV=""
+OVN_NAMESPACE=""
 
 # Parse parameters given as arguments to this script.
 while [ "$1" != "" ]; do
@@ -211,6 +212,9 @@ while [ "$1" != "" ]; do
   --ovnkube-node-mgmt-port-netdev)
     OVNKUBE_NODE_MGMT_PORT_NETDEV=$VALUE
     ;;
+  --namespace)
+    OVN_NAMESPACE=$VALUE
+    ;;
   *)
     echo "WARNING: unknown parameter \"$PARAM\""
     exit 1
@@ -322,6 +326,8 @@ ovn_ex_gw_networking_interface=${OVN_EX_GW_NETWORK_INTERFACE}
 echo "ovn_ex_gw_networking_interface: ${ovn_ex_gw_networking_interface}"
 ovnkube_node_mgmt_port_netdev=${OVNKUBE_NODE_MGMT_PORT_NETDEV}
 echo "ovnkube_node_mgmt_port_netdev: ${ovnkube_node_mgmt_port_netdev}"
+ovn_namespace=${OVN_NAMESPACE:="ovn-kubernetes"}
+echo "ovn_namespace: ${ovn_namespace}"
 
 ovn_image=${image} \
   ovn_image_pull_policy=${image_pull_policy} \
@@ -407,6 +413,7 @@ ovn_image=${image} \
   ovn_master_count=${ovn_master_count} \
   ovn_gateway_mode=${ovn_gateway_mode} \
   ovn_ex_gw_networking_interface=${ovn_ex_gw_networking_interface} \
+  namespace=${ovn_namespace} \
   j2 ../templates/ovnkube-master.yaml.j2 -o ../yaml/ovnkube-master.yaml
 
 ovn_image=${image} \
@@ -416,6 +423,7 @@ ovn_image=${image} \
   ovn_ssl_en=${ovn_ssl_en} \
   ovn_nb_port=${ovn_nb_port} \
   ovn_sb_port=${ovn_sb_port} \
+  namespace=${ovn_namespace} \
   j2 ../templates/ovnkube-db.yaml.j2 -o ../yaml/ovnkube-db.yaml
 
 ovn_image=${image} \
@@ -434,6 +442,7 @@ ovn_image=${image} \
   ovn_sb_port=${ovn_sb_port} \
   ovn_nb_raft_port=${ovn_nb_raft_port} \
   ovn_sb_raft_port=${ovn_sb_raft_port} \
+  namespace=${ovn_namespace} \
   j2 ../templates/ovnkube-db-raft.yaml.j2 -o ../yaml/ovnkube-db-raft.yaml
 
 ovn_image=${image} \
@@ -456,6 +465,7 @@ echo "host_network_namespace: ${host_network_namespace}"
 net_cidr=${net_cidr} svc_cidr=${svc_cidr} \
   mtu_value=${mtu} k8s_apiserver=${k8s_apiserver} \
   host_network_namespace=${host_network_namespace}	\
+  namespace=${ovn_namespace} \
   j2 ../templates/ovn-setup.yaml.j2 -o ../yaml/ovn-setup.yaml
 
 cp ../templates/ovnkube-monitor.yaml.j2 ../yaml/ovnkube-monitor.yaml

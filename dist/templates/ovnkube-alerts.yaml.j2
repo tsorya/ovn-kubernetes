@@ -5,7 +5,7 @@ metadata:
     prometheus: k8s
     role: alert-rules
   name: ovnkube-rules
-  namespace: ovn-kubernetes
+  namespace: {{ namespace }}
 spec:
   groups:
   - name: general.rules

@@ -168,6 +168,9 @@ routable_mtu=${OVN_ROUTABLE_MTU:-}
 metrics_endpoint_ip=${K8S_NODE_IP:-0.0.0.0}
 metrics_endpoint_ip=$(bracketify $metrics_endpoint_ip)
 ovn_kubernetes_namespace=${OVN_KUBERNETES_NAMESPACE:-ovn-kubernetes}
+
+echo "DDDDDDDDDDDDDD namespace ${OVN_KUBERNETES_NAMESPACE}"
+
 # namespace used for classifying host network traffic
 ovn_host_network_namespace=${OVN_HOST_NETWORK_NAMESPACE:-ovn-host-network}
 
@@ -311,7 +314,8 @@ wait_for_event() {
 # before various OVN K8s containers can come up. This functions checks for that.
 ready_to_start_node() {
   # See if ep is available ...
-  IFS=" " read -a ovn_db_hosts <<<"$(kubectl --server=${K8S_APISERVER} --token=${k8s_token} --certificate-authority=${K8S_CACERT} \
+  echo "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA ${ovn_kubernetes_namespace}"
+  IFS=" " read -a ovn_db_hosts <<<"$(kubectl --server=${K8S_APISERVER} --token=${k8s_token} --certificate-authority=${K8S_CACERT}  \
     get ep -n ${ovn_kubernetes_namespace} ovnkube-db -o=jsonpath='{range .subsets[0].addresses[*]}{.ip}{" "}')"
   if [[ ${#ovn_db_hosts[@]} == 0 ]]; then
     return 1
@@ -654,8 +658,10 @@ set_ovnkube_db_ep() {
   ips=("$@")
 
   echo "=============== setting ovnkube-db endpoints to ${ips[@]}"
+  echo "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB ${K8S_APISERVER}"
   # create a new endpoint for the headless onvkube-db service without selectors
-  kubectl --server=${K8S_APISERVER} --token=${k8s_token} --certificate-authority=${K8S_CACERT} apply -f - <<EOF
+
+  kubectl --server=${K8S_APISERVER} --token=${k8s_token} --certificate-authority=${K8S_CACERT}  apply -f - <<EOF
 apiVersion: v1
 kind: Endpoints
 metadata:
@@ -956,6 +962,8 @@ ovn-master() {
     --metrics-bind-address ${ovnkube_master_metrics_bind_address} \
     --host-network-namespace ${ovn_host_network_namespace} &
 
+  echo "UUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUU ${ovn_host_network_namespace}"
+
   echo "=============== ovn-master ========== running"
   wait_for_event attempts=3 process_ready ovnkube-master
 
@@ -1226,8 +1234,9 @@ cleanup-ovn-node() {
   done
 
   echo "=============== time: $(date +%d-%m-%H:%M:%S:%N) cleanup-ovn-node --cleanup-node"
+  echo "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
   /usr/bin/ovnkube --cleanup-node ${K8S_NODE} --gateway-mode=${ovn_gateway_mode} ${ovn_gateway_opts} \
-    --k8s-token=${k8s_token} --k8s-apiserver=${K8S_APISERVER} --k8s-cacert=${K8S_CACERT} \
+    --k8s-token=${k8s_token} --k8s-apiserver=${K8S_APISERVER} --k8s-cacert=${K8S_CACERT}  \
     --loglevel=${ovnkube_loglevel} \
     --logfile /var/log/ovn-kubernetes/ovnkube.log
 
@@ -1295,6 +1304,7 @@ display_version
 # ovn-controller - all nodes (v3)
 # ovn-node       - all nodes (v3)
 # cleanup-ovn-node - all nodes (v3)
+
 
 case ${cmd} in
 "nb-ovsdb") # pod ovnkube-db container nb-ovsdb
