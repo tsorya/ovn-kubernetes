@@ -17,6 +17,9 @@ spec:
   sessionAffinity: None
   selector:
       name: ovnkube-db
+  ipFamilies:
+    - IPv4
+  ipFamilyPolicy: SingleStack
   type: ClusterIP
 
 ---
