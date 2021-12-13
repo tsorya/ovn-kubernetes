@@ -316,7 +316,8 @@ ready_to_start_node() {
   # See if ep is available ...
   echo "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA ${ovn_kubernetes_namespace}"
   IFS=" " read -a ovn_db_hosts <<<"$(kubectl --server=${K8S_APISERVER} --token=${k8s_token} --certificate-authority=${K8S_CACERT}  \
-    get ep -n ${ovn_kubernetes_namespace} ovnkube-db -o=jsonpath='{range .subsets[0].addresses[*]}{.ip}{" "}')"
+    get service -n ${ovn_kubernetes_namespace} ovnkube-db -o=jsonpath='{.spec.clusterIPs[*]}{" "}')"
+  echo "ready_to_start_node ips are ${ovn_db_hosts}"
   if [[ ${#ovn_db_hosts[@]} == 0 ]]; then
     return 1
   fi
@@ -744,8 +745,8 @@ sb-ovsdb() {
   ovn-sbctl --inactivity-probe=0 set-connection p${transport}:${ovn_sb_port}:$(bracketify ${ovn_db_host})
 
   # create the ovnkube-db endpoints
-  wait_for_event attempts=10 check_ovnkube_db_ep ${ovn_db_host} ${ovn_nb_port}
-  set_ovnkube_db_ep ${ovn_db_host}
+  #wait_for_event attempts=10 check_ovnkube_db_ep ${ovn_db_host} ${ovn_nb_port}
+  #set_ovnkube_db_ep ${ovn_db_host}
 
   tail --follow=name ${OVN_LOGDIR}/ovsdb-server-sb.log &
   ovn_tail_pid=$!
