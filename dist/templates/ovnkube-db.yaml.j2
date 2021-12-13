@@ -15,7 +15,8 @@ spec:
     protocol: TCP
     targetPort: {{ ovn_sb_port }}
   sessionAffinity: None
-  clusterIP: None
+  selector:
+      name: ovnkube-db
   type: ClusterIP
 
 ---
