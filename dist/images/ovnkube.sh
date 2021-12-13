@@ -315,7 +315,7 @@ wait_for_event() {
 ready_to_start_node() {
   # See if ep is available ...
   echo "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA ${ovn_kubernetes_namespace}"
-  IFS=" " read -a ovn_db_hosts <<<"$(kubectl --server=${K8S_APISERVER} --token=${k8s_token} --certificate-authority=${K8S_CACERT}  \
+  IFS=" " read -a ovn_db_hosts <<<"$(kubectl --server=${K8S_APISERVER} --token=${k8s_token} --certificate-authority=${K8S_CACERT} \
     get service -n ${ovn_kubernetes_namespace} ovnkube-db -o=jsonpath='{.spec.clusterIPs[*]}{" "}')"
   echo "ready_to_start_node ips are ${ovn_db_hosts}"
   if [[ ${#ovn_db_hosts[@]} == 0 ]]; then
@@ -662,7 +662,7 @@ set_ovnkube_db_ep() {
   echo "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB ${K8S_APISERVER}"
   # create a new endpoint for the headless onvkube-db service without selectors
 
-  kubectl --server=${K8S_APISERVER} --token=${k8s_token} --certificate-authority=${K8S_CACERT}  apply -f - <<EOF
+  kubectl --server=${K8S_APISERVER} --token=${k8s_token} --certificate-authority=${K8S_CACERT} apply -f - <<EOF
 apiVersion: v1
 kind: Endpoints
 metadata:
@@ -760,7 +760,7 @@ ovn-dbchecker() {
   trap 'kill $(jobs -p); exit 0' TERM
   check_ovn_daemonset_version "3"
   rm -f ${OVN_RUNDIR}/ovn-dbchecker.pid
-  
+
   # wait for ready_to_start_node
   echo "=============== ovn-dbchecker - (wait for ready_to_start_node)"
   wait_for_event ready_to_start_node
@@ -786,18 +786,18 @@ ovn-dbchecker() {
         --sb-cert-common-name ${ovn_controller_cname}
       "
   }
-  
+
   echo "=============== ovn-dbchecker ========== OVNKUBE_DB"
   /usr/bin/ovndbchecker \
     --nb-address=${ovn_nbdb} --sb-address=${ovn_sbdb} \
-    ${ovn_db_ssl_opts} \  
-    --loglevel=${ovnkube_loglevel} \
+    ${ovn_db_ssl_opts} \ 
+  --loglevel=${ovnkube_loglevel} \
     --logfile-maxsize=${ovnkube_logfile_maxsize} \
     --logfile-maxbackups=${ovnkube_logfile_maxbackups} \
     --logfile-maxage=${ovnkube_logfile_maxage} \
     --pidfile ${OVN_RUNDIR}/ovn-dbchecker.pid \
     --logfile /var/log/ovn-kubernetes/ovn-dbchecker.log &
-  
+
   echo "=============== ovn-dbchecker ========== running"
   wait_for_event attempts=3 process_ready ovn-dbchecker
 
@@ -878,27 +878,27 @@ ovn-master() {
   fi
   disable_snat_multiple_gws_flag=
   if [[ ${ovn_disable_snat_multiple_gws} == "true" ]]; then
-      disable_snat_multiple_gws_flag="--disable-snat-multiple-gws"
+    disable_snat_multiple_gws_flag="--disable-snat-multiple-gws"
   fi
 
   disable_pkt_mtu_check_flag=
   if [[ ${ovn_disable_pkt_mtu_check} == "true" ]]; then
-      disable_pkt_mtu_check_flag="--disable-pkt-mtu-check"
+    disable_pkt_mtu_check_flag="--disable-pkt-mtu-check"
   fi
 
   empty_lb_events_flag=
   if [[ ${ovn_empty_lb_events} == "true" ]]; then
-      empty_lb_events_flag="--ovn-empty-lb-events"
+    empty_lb_events_flag="--ovn-empty-lb-events"
   fi
 
   ovn_v4_join_subnet_opt=
   if [[ -n ${ovn_v4_join_subnet} ]]; then
-      ovn_v4_join_subnet_opt="--gateway-v4-join-subnet=${ovn_v4_join_subnet}"
+    ovn_v4_join_subnet_opt="--gateway-v4-join-subnet=${ovn_v4_join_subnet}"
   fi
-  
+
   ovn_v6_join_subnet_opt=
   if [[ -n ${ovn_v6_join_subnet} ]]; then
-      ovn_v6_join_subnet_opt="--gateway-v6-join-subnet=${ovn_v6_join_subnet}"
+    ovn_v6_join_subnet_opt="--gateway-v6-join-subnet=${ovn_v6_join_subnet}"
   fi
 
   local ovn_master_ssl_opts=""
@@ -917,21 +917,21 @@ ovn-master() {
 
   ovn_acl_logging_rate_limit_flag=
   if [[ -n ${ovn_acl_logging_rate_limit} ]]; then
-      ovn_acl_logging_rate_limit_flag="--acl-logging-rate-limit ${ovn_acl_logging_rate_limit}"
+    ovn_acl_logging_rate_limit_flag="--acl-logging-rate-limit ${ovn_acl_logging_rate_limit}"
   fi
 
   multicast_enabled_flag=
   if [[ ${ovn_multicast_enable} == "true" ]]; then
-      multicast_enabled_flag="--enable-multicast"
+    multicast_enabled_flag="--enable-multicast"
   fi
 
   egressip_enabled_flag=
   if [[ ${ovn_egressip_enable} == "true" ]]; then
-      egressip_enabled_flag="--enable-egress-ip"
+    egressip_enabled_flag="--enable-egress-ip"
   fi
   egressfirewall_enabled_flag=
   if [[ ${ovn_egressfirewall_enable} == "true" ]]; then
-	  egressfirewall_enabled_flag="--enable-egress-firewall"
+    egressfirewall_enabled_flag="--enable-egress-firewall"
   fi
   echo "egressfirewall_enabled_flag=${egressfirewall_enabled_flag}"
 
@@ -961,9 +961,10 @@ ovn-master() {
     ${egressip_enabled_flag} \
     ${egressfirewall_enabled_flag} \
     --metrics-bind-address ${ovnkube_master_metrics_bind_address} \
-    --host-network-namespace ${ovn_host_network_namespace} &
+    --host-network-namespace ${ovn_host_network_namespace} \
+    --k8s-kubeconfig /test/kubeconfig/kubeconfig &
 
-  echo "UUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUU ${ovn_host_network_namespace}"
+  #     --ovn-config-namespace ${ovn_kubernetes_namespace} \
 
   echo "=============== ovn-master ========== running"
   wait_for_event attempts=3 process_ready ovnkube-master
@@ -1037,7 +1038,7 @@ ovn-node() {
 
   ovn_routable_mtu_flag=
   if [[ -n "${routable_mtu}" ]]; then
-	  routable_mtu_flag="--routable-mtu ${routable_mtu}"
+    routable_mtu_flag="--routable-mtu ${routable_mtu}"
   fi
 
   hybrid_overlay_flags=
@@ -1050,67 +1051,67 @@ ovn-node() {
 
   disable_snat_multiple_gws_flag=
   if [[ ${ovn_disable_snat_multiple_gws} == "true" ]]; then
-      disable_snat_multiple_gws_flag="--disable-snat-multiple-gws"
+    disable_snat_multiple_gws_flag="--disable-snat-multiple-gws"
   fi
 
   disable_pkt_mtu_check_flag=
   if [[ ${ovn_disable_pkt_mtu_check} == "true" ]]; then
-      disable_pkt_mtu_check_flag="--disable-pkt-mtu-check"
+    disable_pkt_mtu_check_flag="--disable-pkt-mtu-check"
   fi
 
   multicast_enabled_flag=
   if [[ ${ovn_multicast_enable} == "true" ]]; then
-      multicast_enabled_flag="--enable-multicast"
+    multicast_enabled_flag="--enable-multicast"
   fi
 
   egressip_enabled_flag=
   if [[ ${ovn_egressip_enable} == "true" ]]; then
-      egressip_enabled_flag="--enable-egress-ip"
+    egressip_enabled_flag="--enable-egress-ip"
   fi
 
   disable_ovn_iface_id_ver_flag=
   if [[ ${ovn_disable_ovn_iface_id_ver} == "true" ]]; then
-      disable_ovn_iface_id_ver_flag="--disable-ovn-iface-id-ver"
+    disable_ovn_iface_id_ver_flag="--disable-ovn-iface-id-ver"
   fi
 
   netflow_targets=
   if [[ -n ${ovn_netflow_targets} ]]; then
-      netflow_targets="--netflow-targets ${ovn_netflow_targets}"
+    netflow_targets="--netflow-targets ${ovn_netflow_targets}"
   fi
 
   sflow_targets=
   if [[ -n ${ovn_sflow_targets} ]]; then
-      sflow_targets="--sflow-targets ${ovn_sflow_targets}"
+    sflow_targets="--sflow-targets ${ovn_sflow_targets}"
   fi
 
   ipfix_targets=
   if [[ -n ${ovn_ipfix_targets} ]]; then
-      ipfix_targets="--ipfix-targets ${ovn_ipfix_targets}"
+    ipfix_targets="--ipfix-targets ${ovn_ipfix_targets}"
   fi
 
   monitor_all=
   if [[ -n ${ovn_monitor_all} ]]; then
-     monitor_all="--monitor-all=${ovn_monitor_all}"
+    monitor_all="--monitor-all=${ovn_monitor_all}"
   fi
 
   enable_lflow_cache=
   if [[ -n ${ovn_enable_lflow_cache} ]]; then
-     enable_lflow_cache="--enable-lflow-cache=${ovn_enable_lflow_cache}"
+    enable_lflow_cache="--enable-lflow-cache=${ovn_enable_lflow_cache}"
   fi
 
   lflow_cache_limit=
   if [[ -n ${ovn_lflow_cache_limit} ]]; then
-     lflow_cache_limit="--lflow-cache-limit=${ovn_lflow_cache_limit}"
+    lflow_cache_limit="--lflow-cache-limit=${ovn_lflow_cache_limit}"
   fi
 
   lflow_cache_limit_kb=
   if [[ -n ${ovn_lflow_cache_limit_kb} ]]; then
-     lflow_cache_limit_kb="--lflow-cache-limit-kb=${ovn_lflow_cache_limit_kb}"
+    lflow_cache_limit_kb="--lflow-cache-limit-kb=${ovn_lflow_cache_limit_kb}"
   fi
 
   egress_interface=
   if [[ -n ${ovn_ex_gw_network_interface} ]]; then
-      egress_interface="--exgw-interface ${ovn_ex_gw_network_interface}"
+    egress_interface="--exgw-interface ${ovn_ex_gw_network_interface}"
   fi
 
   ovn_encap_ip_flag=
@@ -1145,8 +1146,8 @@ ovn-node() {
 
   local ovn_node_ssl_opts=""
   if [[ ${ovnkube_node_mode} != "dpu-host" ]]; then
-      [[ "yes" == ${OVN_SSL_ENABLE} ]] && {
-        ovn_node_ssl_opts="
+    [[ "yes" == ${OVN_SSL_ENABLE} ]] && {
+      ovn_node_ssl_opts="
             --nb-client-privkey ${ovn_controller_pk}
             --nb-client-cert ${ovn_controller_cert}
             --nb-client-cacert ${ovn_ca_cert}
@@ -1156,7 +1157,7 @@ ovn-node() {
             --sb-client-cacert ${ovn_ca_cert}
             --sb-cert-common-name ${ovn_controller_cname}
           "
-      }
+    }
   fi
 
   ovn_unprivileged_flag="--unprivileged-mode"
@@ -1201,10 +1202,10 @@ ovn-node() {
     ${ipfix_targets} \
     --ovn-metrics-bind-address ${ovn_metrics_bind_address} \
     --metrics-bind-address ${ovnkube_node_metrics_bind_address} \
-     ${ovnkube_node_mode_flag} \
+    ${ovnkube_node_mode_flag} \
     ${egress_interface} \
     --host-network-namespace ${ovn_host_network_namespace} \
-     ${ovnkube_node_mgmt_port_netdev_flag} &
+    ${ovnkube_node_mgmt_port_netdev_flag} &
 
   wait_for_event attempts=3 process_ready ovnkube
   if [[ ${ovnkube_node_mode} != "dpu" ]]; then
@@ -1237,7 +1238,7 @@ cleanup-ovn-node() {
   echo "=============== time: $(date +%d-%m-%H:%M:%S:%N) cleanup-ovn-node --cleanup-node"
   echo "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
   /usr/bin/ovnkube --cleanup-node ${K8S_NODE} --gateway-mode=${ovn_gateway_mode} ${ovn_gateway_opts} \
-    --k8s-token=${k8s_token} --k8s-apiserver=${K8S_APISERVER} --k8s-cacert=${K8S_CACERT}  \
+    --k8s-token=${k8s_token} --k8s-apiserver=${K8S_APISERVER} --k8s-cacert=${K8S_CACERT} \
     --loglevel=${ovnkube_loglevel} \
     --logfile /var/log/ovn-kubernetes/ovnkube.log
 
@@ -1305,7 +1306,6 @@ display_version
 # ovn-controller - all nodes (v3)
 # ovn-node       - all nodes (v3)
 # cleanup-ovn-node - all nodes (v3)
-
 
 case ${cmd} in
 "nb-ovsdb") # pod ovnkube-db container nb-ovsdb

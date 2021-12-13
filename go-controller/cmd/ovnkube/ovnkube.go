@@ -191,6 +191,8 @@ func runOvnKube(ctx *cli.Context) error {
 		return fmt.Errorf("failed to initialize exec helper: %v", err)
 	}
 
+	klog.Infof("USED KUBECONFIG %s", &config.Kubernetes.Kubeconfig)
+
 	ovnClientset, err := util.NewOVNClientset(&config.Kubernetes)
 	if err != nil {
 		return err

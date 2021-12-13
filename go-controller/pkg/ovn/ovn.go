@@ -406,15 +406,15 @@ func (oc *Controller) Run(wg *sync.WaitGroup, nodeName string) error {
 		return fmt.Errorf("failed to generate set topology version in OVN, err: %v", err)
 	}
 
-	// Update topology version on node
-	node, err := oc.kube.GetNode(nodeName)
-	if err != nil {
-		return fmt.Errorf("unable to get node: %s", nodeName)
-	}
-	err = oc.kube.SetAnnotationsOnNode(node.Name, map[string]interface{}{ovntypes.OvnK8sTopoAnno: strconv.Itoa(ovntypes.OvnCurrentTopologyVersion)})
-	if err != nil {
-		return fmt.Errorf("failed to set topology annotation for node %s", node.Name)
-	}
+	//// Update topology version on node
+	//node, err := oc.kube.GetNode(nodeName)
+	//if err != nil {
+	//	return fmt.Errorf("unable to get node: %s", nodeName)
+	//}
+	//err = oc.kube.SetAnnotationsOnNode(node.Name, map[string]interface{}{ovntypes.OvnK8sTopoAnno: strconv.Itoa(ovntypes.OvnCurrentTopologyVersion)})
+	//if err != nil {
+	//	return fmt.Errorf("failed to set topology annotation for node %s", node.Name)
+	//}
 
 	return nil
 }
