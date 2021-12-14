@@ -36,7 +36,7 @@ spec:
       # Requires fairly broad permissions - ability to read all services and network functions as well
       # as all pods.
       serviceAccountName: ovn
-      hostNetwork: true
+      hostNetwork: false
 
       # required to be scheduled on a linux node with node-role.kubernetes.io/master label and
       # only one instance of ovnkube-master pod per node
