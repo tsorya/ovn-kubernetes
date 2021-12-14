@@ -197,6 +197,8 @@ spec:
         - mountPath: /ovn-cert
           name: host-ovn-cert
           readOnly: true
+        - mountPath: /test/kubeconfig
+          name: kubeconfig
 
         resources:
           requests:
@@ -289,5 +291,8 @@ spec:
         hostPath:
           path: /etc/ovn
           type: DirectoryOrCreate
+      - name: kubeconfig
+        secret:
+          secretName: admin-kubeconfig
       tolerations:
       - operator: "Exists"
