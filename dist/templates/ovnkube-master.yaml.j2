@@ -67,7 +67,7 @@ spec:
       # ovn-northd - v3
       - name: ovn-northd
         image: "{{ ovn_image | default('docker.io/ovnkube/ovn-daemonset:latest') }}"
-        imagePullPolicy: "{{ ovn_image_pull_policy | default('IfNotPresent') }}"
+        imagePullPolicy: "{{ ovn_image_pull_policy | default('Always') }}"
 
         command: ["/root/ovnkube.sh", "run-ovn-northd"]
 
@@ -121,7 +121,7 @@ spec:
 
       - name: nbctl-daemon
         image: "{{ ovn_image | default('docker.io/ovnkube/ovn-daemonset:latest') }}"
-        imagePullPolicy: "{{ ovn_image_pull_policy | default('IfNotPresent') }}"
+        imagePullPolicy: "{{ ovn_image_pull_policy | default('Always') }}"
 
         command: ["/root/ovnkube.sh", "run-nbctld"]
 
@@ -172,7 +172,7 @@ spec:
 
       - name: ovnkube-master
         image: "{{ ovn_image | default('docker.io/ovnkube/ovn-daemonset:latest') }}"
-        imagePullPolicy: "{{ ovn_image_pull_policy | default('IfNotPresent') }}"
+        imagePullPolicy: "{{ ovn_image_pull_policy | default('Always') }}"
 
         command: ["/root/ovnkube.sh", "ovn-master"]
 
@@ -191,7 +191,7 @@ spec:
         - mountPath: /ovn-cert
           name: ovn-cert
           readOnly: true
-        - mountPath: /test/kubeconfig
+        - mountPath: /etc/kubernetes
           name: kubeconfig
 
         resources:

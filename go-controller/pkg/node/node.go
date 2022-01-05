@@ -539,6 +539,15 @@ func (n *OvnNode) Start(wg *sync.WaitGroup) error {
 				return err
 			}
 		}
+
+		confFileForMultus := filepath.Join("/var/run/multus/cni/net.d/", config.CNIConfFileName)
+		_, err = os.Stat(confFileForMultus)
+		if os.IsNotExist(err) {
+			err = config.WriteCNIConfig()
+			if err != nil {
+				return err
+			}
+		}
 	}
 
 	if config.OvnKubeNode.Mode == types.NodeModeDPU {

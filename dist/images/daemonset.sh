@@ -215,6 +215,9 @@ while [ "$1" != "" ]; do
   --namespace)
     OVN_NAMESPACE=$VALUE
     ;;
+  --db-dns)
+    DB_DNS=$VALUE
+    ;;
   *)
     echo "WARNING: unknown parameter \"$PARAM\""
     exit 1
@@ -328,6 +331,8 @@ ovnkube_node_mgmt_port_netdev=${OVNKUBE_NODE_MGMT_PORT_NETDEV}
 echo "ovnkube_node_mgmt_port_netdev: ${ovnkube_node_mgmt_port_netdev}"
 ovn_namespace=${OVN_NAMESPACE:="ovn-kubernetes"}
 echo "ovn_namespace: ${ovn_namespace}"
+ovnkube_db_dns_name=${DB_DNS}
+echo "ovnkube_db_dns_name: ${ovnkube_db_dns_name}"
 
 ovn_image=${image} \
   ovn_image_pull_policy=${image_pull_policy} \
@@ -359,6 +364,7 @@ ovn_image=${image} \
   ovn_ex_gw_networking_interface=${ovn_ex_gw_networking_interface} \
   ovn_disable_ovn_iface_id_ver=${ovn_disable_ovn_iface_id_ver} \
   ovnkube_app_name=ovnkube-node \
+  ovnkube_db_dns_name=${ovnkube_db_dns_name} \
   j2 ../templates/ovnkube-node.yaml.j2 -o ../yaml/ovnkube-node.yaml
 
 # ovnkube node for dpu-host daemonset
@@ -388,6 +394,7 @@ ovn_image=${image} \
   ovn_ex_gw_networking_interface=${ovn_ex_gw_networking_interface} \
   ovnkube_node_mgmt_port_netdev=${ovnkube_node_mgmt_port_netdev} \
   ovnkube_app_name=ovnkube-node-dpu-host \
+  ovnkube_db_dns_name=${ovnkube_db_dns_name} \
   j2 ../templates/ovnkube-node.yaml.j2 -o ../yaml/ovnkube-node-dpu-host.yaml
 
 ovn_image=${image} \

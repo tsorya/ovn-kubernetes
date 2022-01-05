@@ -126,6 +126,7 @@ fi
 # certs and private keys for k8s and OVN
 K8S_CACERT=${K8S_CACERT:-/var/run/secrets/kubernetes.io/serviceaccount/ca.crt}
 
+
 ovn_ca_cert=/ovn-cert/ca-cert.pem
 ovn_nb_pk=/ovn-cert/ovnnb-privkey.pem
 ovn_nb_cert=/ovn-cert/ovnnb-cert.pem
@@ -136,6 +137,8 @@ ovn_northd_cert=/ovn-cert/ovnnorthd-cert.pem
 ovn_controller_pk=/ovn-cert/ovncontroller-privkey.pem
 ovn_controller_cert=/ovn-cert/ovncontroller-cert.pem
 ovn_controller_cname="ovncontroller"
+
+echo "JJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ ${ovn_controller_pk} -c ${ovn_controller_cert} -C ${ovn_ca_cert} "
 
 transport="tcp"
 ovndb_ctl_ssl_opts=""
@@ -324,6 +327,26 @@ ready_to_start_node() {
   get_ovn_db_vars
   return 0
 }
+
+# The ovnkube-db kubernetes service must be populated with OVN DB service endpoints
+# before various OVN K8s containers can come up. This functions checks for that.
+ready_to_start_node_node() {
+  # See if ep is available ...
+  echo "BBBBBBBBBBBBBBBBBBBBBB ${ovn_kubernetes_namespace}"
+
+  ovn_db_hosts=${OVN_HOST_DNS:-"ovn-clusters-test-hypershift-ovn-hosted-2.apps.test-ovn.kni.syseng.devcluster.openshift.com"}
+#  IFS=" " read -a ovn_db_hosts <<<"$(kubectl --server=${K8S_APISERVER} --token=${k8s_token} --certificate-authority=${K8S_CACERT} \
+#    get service -n ${ovn_kubernetes_namespace} ovnkube-db -o=jsonpath='{.spec.clusterIPs[*]}{" "}')"
+  echo "ready_to_start_node ips are ${ovn_db_hosts}"
+  if [[ ${#ovn_db_hosts[@]} == 0 ]]; then
+    return 1
+  fi
+  get_ovn_db_vars_nodes
+  return 0
+}
+
+
+
 # wait_for_event ready_to_start_node
 
 # check that daemonset version is among expected versions
@@ -336,6 +359,31 @@ check_ovn_daemonset_version() {
   done
   echo "VERSION MISMATCH expect ${ok}, daemonset is version ${ovn_daemonset_version}"
   exit 1
+}
+
+get_ovn_db_vars_nodes() {
+  ovn_nbdb_str=""
+  ovn_sbdb_str=""
+  for i in "${ovn_db_hosts[@]}"; do
+    if [ -n "$ovn_nbdb_str" ]; then
+      ovn_nbdb_str=${ovn_nbdb_str}","
+      ovn_sbdb_str=${ovn_sbdb_str}","
+    fi
+    ip=$(bracketify $i)
+    echo "was here and set 443"
+    ovn_nbdb_str=${ovn_nbdb_str}${transport}://${ip}:443
+    ovn_sbdb_str=${ovn_sbdb_str}${transport}://${ip}:443
+  done
+  # OVN_NORTH and OVN_SOUTH override derived host
+  echo "3333333333333 ${OVN_NORTH} $ovn_nbdb_str"
+  ovn_nbdb=${OVN_NORTH:-$ovn_nbdb_str}
+  ovn_sbdb=${OVN_SOUTH:-$ovn_sbdb_str}
+
+  echo ovn_nbdb=$ovn_nbdb
+  echo ovn_sbdb=$ovn_sbdb
+  # ovsdb server connection method <transport>:<host_address>:<port>
+  ovn_nbdb_conn=$(echo ${ovn_nbdb} | sed 's;//;;g')
+  ovn_sbdb_conn=$(echo ${ovn_sbdb} | sed 's;//;;g')
 }
 
 get_ovn_db_vars() {
@@ -495,7 +543,7 @@ display() {
 }
 
 setup_cni() {
-  cp -f /usr/libexec/cni/ovn-k8s-cni-overlay /opt/cni/bin/ovn-k8s-cni-overlay
+  cp -f /usr/libexec/cni/ovn-k8s-cni-overlay /var/lib/cni/bin/ovn-k8s-cni-overlay
 }
 
 display_version() {
@@ -962,7 +1010,7 @@ ovn-master() {
     ${egressfirewall_enabled_flag} \
     --metrics-bind-address ${ovnkube_master_metrics_bind_address} \
     --host-network-namespace ${ovn_host_network_namespace} \
-    --k8s-kubeconfig /test/kubeconfig/kubeconfig &
+    --k8s-kubeconfig /etc/kubernetes/kubeconfig &
 
   #     --ovn-config-namespace ${ovn_kubernetes_namespace} \
 
@@ -982,7 +1030,7 @@ ovn-controller() {
   wait_for_event ovs_ready
 
   echo "=============== ovn-controller - (wait for ready_to_start_node)"
-  wait_for_event ready_to_start_node
+  wait_for_event ready_to_start_node_node
 
   echo "ovn_nbdb ${ovn_nbdb}   ovn_sbdb ${ovn_sbdb}"
   echo "ovn_nbdb_conn ${ovn_nbdb_conn}"
@@ -1027,7 +1075,7 @@ ovn-node() {
   fi
 
   echo "=============== ovn-node - (wait for ready_to_start_node)"
-  wait_for_event ready_to_start_node
+  wait_for_event ready_to_start_node_node
 
   echo "ovn_nbdb ${ovn_nbdb}   ovn_sbdb ${ovn_sbdb}  ovn_nbdb_conn ${ovn_nbdb_conn}"
 
@@ -1205,6 +1253,7 @@ ovn-node() {
     ${ovnkube_node_mode_flag} \
     ${egress_interface} \
     --host-network-namespace ${ovn_host_network_namespace} \
+    --k8s-kubeconfig /etc/kubernetes/kubeconfig \
     ${ovnkube_node_mgmt_port_netdev_flag} &
 
   wait_for_event attempts=3 process_ready ovnkube
@@ -1236,7 +1285,6 @@ cleanup-ovn-node() {
   done
 
   echo "=============== time: $(date +%d-%m-%H:%M:%S:%N) cleanup-ovn-node --cleanup-node"
-  echo "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
   /usr/bin/ovnkube --cleanup-node ${K8S_NODE} --gateway-mode=${ovn_gateway_mode} ${ovn_gateway_opts} \
     --k8s-token=${k8s_token} --k8s-apiserver=${K8S_APISERVER} --k8s-cacert=${K8S_CACERT} \
     --loglevel=${ovnkube_loglevel} \
