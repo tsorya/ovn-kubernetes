@@ -173,7 +173,6 @@ func setupPIDFile(pidfile string) error {
 }
 
 func runOvnKube(ctx *cli.Context) error {
-	klog.Errorf("11111111111111111111111111111111111111")
 	pidfile := ctx.String("pidfile")
 	if pidfile != "" {
 		defer delPidfile(pidfile)
@@ -233,15 +232,15 @@ func runOvnKube(ctx *cli.Context) error {
 		watchFactory = masterWatchFactory
 		var libovsdbOvnNBClient, libovsdbOvnSBClient libovsdbclient.Client
 
+		// TODO setting hardcoded cert
 		config.OvnNorth.CertCommonName = "ovncontroller id:749a5ada-8360-42e9-bfdf-65cd6c44a974"
-		klog.Infof("yyyyyyyyyyyyyy %s %v", config.OvnNorth.CertCommonName, config.OvnNorth)
 
 		if libovsdbOvnNBClient, err = libovsdb.NewNBClient(stopChan); err != nil {
 			return fmt.Errorf("error when trying to initialize libovsdb NB client: %v", err)
 		}
 
+		// TODO setting hardcoded cert
 		config.OvnSouth.CertCommonName = "ovnsb id:39c3053e-bc45-4893-b3d9-c73580529c2b"
-		klog.Infof("nnnnnnnnnnnnnnnnnnnnnnnnn %s %v", config.OvnNorth.CertCommonName, config.OvnNorth)
 		if libovsdbOvnSBClient, err = libovsdb.NewSBClient(stopChan); err != nil {
 			return fmt.Errorf("error when trying to initialize libovsdb SB client: %v", err)
 		}

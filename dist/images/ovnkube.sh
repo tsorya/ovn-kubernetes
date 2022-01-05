@@ -172,7 +172,7 @@ metrics_endpoint_ip=${K8S_NODE_IP:-0.0.0.0}
 metrics_endpoint_ip=$(bracketify $metrics_endpoint_ip)
 ovn_kubernetes_namespace=${OVN_KUBERNETES_NAMESPACE:-ovn-kubernetes}
 
-echo "DDDDDDDDDDDDDD namespace ${OVN_KUBERNETES_NAMESPACE}"
+echo "namespace ${OVN_KUBERNETES_NAMESPACE}"
 
 # namespace used for classifying host network traffic
 ovn_host_network_namespace=${OVN_HOST_NETWORK_NAMESPACE:-ovn-host-network}
@@ -317,7 +317,7 @@ wait_for_event() {
 # before various OVN K8s containers can come up. This functions checks for that.
 ready_to_start_node() {
   # See if ep is available ...
-  echo "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA ${ovn_kubernetes_namespace}"
+  echo "namespace ${ovn_kubernetes_namespace}"
   IFS=" " read -a ovn_db_hosts <<<"$(kubectl --server=${K8S_APISERVER} --token=${k8s_token} --certificate-authority=${K8S_CACERT} \
     get service -n ${ovn_kubernetes_namespace} ovnkube-db -o=jsonpath='{.spec.clusterIPs[*]}{" "}')"
   echo "ready_to_start_node ips are ${ovn_db_hosts}"
@@ -332,7 +332,6 @@ ready_to_start_node() {
 # before various OVN K8s containers can come up. This functions checks for that.
 ready_to_start_node_node() {
   # See if ep is available ...
-  echo "BBBBBBBBBBBBBBBBBBBBBB ${ovn_kubernetes_namespace}"
 
   ovn_db_hosts=${OVN_HOST_DNS:-"ovn-clusters-test-hypershift-ovn-hosted-2.apps.test-ovn.kni.syseng.devcluster.openshift.com"}
 #  IFS=" " read -a ovn_db_hosts <<<"$(kubectl --server=${K8S_APISERVER} --token=${k8s_token} --certificate-authority=${K8S_CACERT} \
@@ -375,7 +374,6 @@ get_ovn_db_vars_nodes() {
     ovn_sbdb_str=${ovn_sbdb_str}${transport}://${ip}:443
   done
   # OVN_NORTH and OVN_SOUTH override derived host
-  echo "3333333333333 ${OVN_NORTH} $ovn_nbdb_str"
   ovn_nbdb=${OVN_NORTH:-$ovn_nbdb_str}
   ovn_sbdb=${OVN_SOUTH:-$ovn_sbdb_str}
 
@@ -707,7 +705,6 @@ set_ovnkube_db_ep() {
   ips=("$@")
 
   echo "=============== setting ovnkube-db endpoints to ${ips[@]}"
-  echo "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB ${K8S_APISERVER}"
   # create a new endpoint for the headless onvkube-db service without selectors
 
   kubectl --server=${K8S_APISERVER} --token=${k8s_token} --certificate-authority=${K8S_CACERT} apply -f - <<EOF
