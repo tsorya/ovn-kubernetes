@@ -7,7 +7,7 @@ apiVersion: apps/v1
 metadata:
   name: ovnkube-master
   # namespace set up by install
-  namespace: ovn-kubernetes
+  namespace: {{ namespace }}
   annotations:
     kubernetes.io/description: |
       This Deployment launches the ovn-kubernetes master networking components.
@@ -36,7 +36,7 @@ spec:
       # Requires fairly broad permissions - ability to read all services and network functions as well
       # as all pods.
       serviceAccountName: ovn
-      hostNetwork: true
+      hostNetwork: false
 
       # required to be scheduled on a linux node with node-role.kubernetes.io/master label and
       # only one instance of ovnkube-master pod per node
@@ -67,7 +67,7 @@ spec:
       # ovn-northd - v3
       - name: ovn-northd
         image: "{{ ovn_image | default('docker.io/ovnkube/ovn-daemonset:latest') }}"
-        imagePullPolicy: "{{ ovn_image_pull_policy | default('IfNotPresent') }}"
+        imagePullPolicy: "{{ ovn_image_pull_policy | default('Always') }}"
 
         command: ["/root/ovnkube.sh", "run-ovn-northd"]
 
@@ -79,19 +79,16 @@ spec:
         terminationMessagePolicy: FallbackToLogsOnError
         volumeMounts:
         # Run directories where we need to be able to access sockets
-        - mountPath: /var/run/dbus/
-          name: host-var-run-dbus
-          readOnly: true
         - mountPath: /var/log/openvswitch/
-          name: host-var-log-ovs
+          name: var-log-ovs
         - mountPath: /var/log/ovn/
-          name: host-var-log-ovs
+          name: var-log-ovs
         - mountPath: /var/run/openvswitch/
-          name: host-var-run-ovs
+          name: var-run-ovs
         - mountPath: /var/run/ovn/
-          name: host-var-run-ovs
+          name: var-run-ovs
         - mountPath: /ovn-cert
-          name: host-ovn-cert
+          name: ovn-cert
           readOnly: true
 
         resources:
@@ -124,7 +121,7 @@ spec:
 
       - name: nbctl-daemon
         image: "{{ ovn_image | default('docker.io/ovnkube/ovn-daemonset:latest') }}"
-        imagePullPolicy: "{{ ovn_image_pull_policy | default('IfNotPresent') }}"
+        imagePullPolicy: "{{ ovn_image_pull_policy | default('Always') }}"
 
         command: ["/root/ovnkube.sh", "run-nbctld"]
 
@@ -134,15 +131,15 @@ spec:
         terminationMessagePolicy: FallbackToLogsOnError
         volumeMounts:
         - mountPath: /var/log/openvswitch/
-          name: host-var-log-ovs
+          name: var-log-ovs
         - mountPath: /var/log/ovn/
-          name: host-var-log-ovs
+          name: var-log-ovs
         - mountPath: /var/run/openvswitch/
-          name: host-var-run-ovs
+          name: var-run-ovs
         - mountPath: /var/run/ovn/
-          name: host-var-run-ovs
+          name: var-run-ovs
         - mountPath: /ovn-cert
-          name: host-ovn-cert
+          name: ovn-cert
           readOnly: true
         resources:
           requests:
@@ -160,6 +157,10 @@ spec:
               key: k8s_apiserver
         - name: OVN_SSL_ENABLE
           value: "{{ ovn_ssl_en }}"
+        - name: OVN_KUBERNETES_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
 
         readinessProbe:
           exec:
@@ -171,7 +172,7 @@ spec:
 
       - name: ovnkube-master
         image: "{{ ovn_image | default('docker.io/ovnkube/ovn-daemonset:latest') }}"
-        imagePullPolicy: "{{ ovn_image_pull_policy | default('IfNotPresent') }}"
+        imagePullPolicy: "{{ ovn_image_pull_policy | default('Always') }}"
 
         command: ["/root/ovnkube.sh", "ovn-master"]
 
@@ -181,18 +182,17 @@ spec:
         terminationMessagePolicy: FallbackToLogsOnError
         volumeMounts:
         # Run directories where we need to be able to access sockets
-        - mountPath: /var/run/dbus/
-          name: host-var-run-dbus
-          readOnly: true
         - mountPath: /var/log/ovn-kubernetes/
-          name: host-var-log-ovnkube
+          name: var-log-ovnkube
         - mountPath: /var/run/openvswitch/
-          name: host-var-run-ovs
+          name: var-run-ovs
         - mountPath: /var/run/ovn/
-          name: host-var-run-ovs
+          name: var-run-ovs
         - mountPath: /ovn-cert
-          name: host-ovn-cert
+          name: ovn-cert
           readOnly: true
+        - mountPath: /etc/kubernetes
+          name: kubeconfig
 
         resources:
           requests:
@@ -268,22 +268,17 @@ spec:
       # end of container
 
       volumes:
-      # TODO: Need to check why we need this?
-      - name: host-var-run-dbus
-        hostPath:
-          path: /var/run/dbus
-      - name: host-var-log-ovs
-        hostPath:
-          path: /var/log/openvswitch
-      - name: host-var-log-ovnkube
-        hostPath:
-          path: /var/log/ovn-kubernetes
-      - name: host-var-run-ovs
-        hostPath:
-          path: /var/run/openvswitch
-      - name: host-ovn-cert
-        hostPath:
-          path: /etc/ovn
-          type: DirectoryOrCreate
+      - name: var-log-ovs
+        emptyDir: {}
+      - name: var-log-ovnkube
+        emptyDir: {}
+      - name: var-run-ovs
+        emptyDir: {}
+      - name: ovn-cert
+        secret:
+          secretName: ovn-northd-certs
+      - name: kubeconfig
+        secret:
+          secretName: admin-kubeconfig
       tolerations:
       - operator: "Exists"

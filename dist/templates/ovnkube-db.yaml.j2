@@ -3,7 +3,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: ovnkube-db
-  namespace: ovn-kubernetes
+  namespace: {{ namespace }}
 spec:
   ports:
   - name: north
@@ -15,7 +15,11 @@ spec:
     protocol: TCP
     targetPort: {{ ovn_sb_port }}
   sessionAffinity: None
-  clusterIP: None
+  selector:
+      name: ovnkube-db
+  ipFamilies:
+    - IPv4
+  ipFamilyPolicy: SingleStack
   type: ClusterIP
 
 ---
@@ -29,7 +33,7 @@ apiVersion: apps/v1
 metadata:
   name: ovnkube-db
   # namespace set up by install
-  namespace: ovn-kubernetes
+  namespace: {{ namespace }}
   annotations:
     kubernetes.io/description: |
       This daemonset launches the OVN NB/SB ovsdb service components.
@@ -59,7 +63,7 @@ spec:
       # Requires fairly broad permissions - ability to read all services and network functions as well
       # as all pods.
       serviceAccountName: ovn
-      hostNetwork: true
+      hostNetwork: false
       containers:
       # firewall rules for ovn - assumed to be setup
       # iptables -A OS_FIREWALL_ALLOW -p tcp -m state --state NEW -m tcp --dport 6641 -j ACCEPT
@@ -79,24 +83,9 @@ spec:
 
         terminationMessagePolicy: FallbackToLogsOnError
         volumeMounts:
-        # ovn db is stored in the pod in /etc/openvswitch
-        # (or in /etc/ovn if OVN from new repository is used)
-        # and on the host in /var/lib/openvswitch/
-        - mountPath: /etc/openvswitch/
-          name: host-var-lib-ovs
-        - mountPath: /etc/ovn/
-          name: host-var-lib-ovs
-        - mountPath: /var/log/openvswitch/
-          name: host-var-log-ovs
-        - mountPath: /var/log/ovn/
-          name: host-var-log-ovs
         - mountPath: /ovn-cert
-          name: host-ovn-cert
+          name: ovn-certs
           readOnly: true
-        - mountPath: /var/run/ovn/
-          name: host-var-run-ovs
-        - mountPath: /var/run/openvswitch/
-          name: host-var-run-ovs
 
         resources:
           requests:
@@ -119,7 +108,7 @@ spec:
         - name: K8S_NODE_IP
           valueFrom:
             fieldRef:
-              fieldPath: status.hostIP
+              fieldPath: status.podIP
         - name: OVN_SSL_ENABLE
           value: "{{ ovn_ssl_en }}"
         - name: OVN_NB_PORT
@@ -146,24 +135,9 @@ spec:
 
         terminationMessagePolicy: FallbackToLogsOnError
         volumeMounts:
-        # ovn db is stored in the pod in /etc/openvswitch
-        # (or in /etc/ovn if OVN from new repository is used)
-        # and on the host in /var/lib/openvswitch/
-        - mountPath: /etc/openvswitch/
-          name: host-var-lib-ovs
-        - mountPath: /etc/ovn/
-          name: host-var-lib-ovs
-        - mountPath: /var/log/openvswitch/
-          name: host-var-log-ovs
-        - mountPath: /var/log/ovn/
-          name: host-var-log-ovs
         - mountPath: /ovn-cert
-          name: host-ovn-cert
+          name: ovn-certs
           readOnly: true
-        - mountPath: /var/run/ovn/
-          name: host-var-run-ovs
-        - mountPath: /var/run/openvswitch/
-          name: host-var-run-ovs
 
         resources:
           requests:
@@ -186,7 +160,7 @@ spec:
         - name: K8S_NODE_IP
           valueFrom:
             fieldRef:
-              fieldPath: status.hostIP
+              fieldPath: status.podIP
         - name: OVN_SSL_ENABLE
           value: "{{ ovn_ssl_en }}"
         - name: OVN_SB_PORT
@@ -204,18 +178,10 @@ spec:
         node-role.kubernetes.io/master: ""
         kubernetes.io/os: "linux"
       volumes:
-      - name: host-var-lib-ovs
-        hostPath:
-          path: /var/lib/openvswitch
-      - name: host-var-log-ovs
-        hostPath:
-          path: /var/log/openvswitch
-      - name: host-ovn-cert
-        hostPath:
-          path: /etc/ovn
-          type: DirectoryOrCreate
-      - name: host-var-run-ovs
-        hostPath:
-          path: /var/run/openvswitch
+      - name: ovn-certs
+        secret:
+          defaultMode: 420
+          secretName: ovn-certs
+
       tolerations:
       - operator: "Exists"

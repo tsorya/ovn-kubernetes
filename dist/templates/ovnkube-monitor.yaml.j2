@@ -7,7 +7,7 @@ metadata:
   labels:
     k8s-app: ovnkube-master
   name: monitor-ovnkube-master
-  namespace: ovn-kubernetes
+  namespace: {{ namespace }}
 spec:
   endpoints:
   - interval: 30s
@@ -28,7 +28,7 @@ metadata:
   labels:
     k8s-app: ovnkube-master
   name: ovnkube-master-prometheus-discovery
-  namespace: ovn-kubernetes
+  namespace: {{ namespace }}
 spec:
   selector:
     name: ovnkube-master
@@ -48,7 +48,7 @@ metadata:
   labels:
     k8s-app: ovnkube-node
   name: monitor-ovnkube-node
-  namespace: ovn-kubernetes
+  namespace: {{ namespace }}
 spec:
   endpoints:
   - interval: 30s
@@ -77,7 +77,7 @@ metadata:
   labels:
     k8s-app: ovnkube-node
   name: ovnkube-node-prometheus-discovery
-  namespace: ovn-kubernetes
+  namespace: {{ namespace }}
 spec:
   selector:
     name: ovnkube-node

@@ -191,6 +191,8 @@ func runOvnKube(ctx *cli.Context) error {
 		return fmt.Errorf("failed to initialize exec helper: %v", err)
 	}
 
+	klog.Infof("USED KUBECONFIG %s", &config.Kubernetes.Kubeconfig)
+
 	ovnClientset, err := util.NewOVNClientset(&config.Kubernetes)
 	if err != nil {
 		return err
@@ -230,10 +232,15 @@ func runOvnKube(ctx *cli.Context) error {
 		watchFactory = masterWatchFactory
 		var libovsdbOvnNBClient, libovsdbOvnSBClient libovsdbclient.Client
 
+		// TODO setting hardcoded cert
+		config.OvnNorth.CertCommonName = "ovncontroller id:749a5ada-8360-42e9-bfdf-65cd6c44a974"
+
 		if libovsdbOvnNBClient, err = libovsdb.NewNBClient(stopChan); err != nil {
 			return fmt.Errorf("error when trying to initialize libovsdb NB client: %v", err)
 		}
 
+		// TODO setting hardcoded cert
+		config.OvnSouth.CertCommonName = "ovnsb id:39c3053e-bc45-4893-b3d9-c73580529c2b"
 		if libovsdbOvnSBClient, err = libovsdb.NewSBClient(stopChan); err != nil {
 			return fmt.Errorf("error when trying to initialize libovsdb SB client: %v", err)
 		}
