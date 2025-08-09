@@ -690,6 +690,9 @@ func getMgmtPortAndRepNameModeDPU(node *corev1.Node) (string, string, error) {
 }
 
 func getMgmtPortAndRepNameModeDPUHost() (string, string, error) {
+	if config.OvnKubeNode.MgmtPortNetdev == "" {
+		return "", "", nil
+	}
 	netdevName, err := getManagementPortNetDev(config.OvnKubeNode.MgmtPortNetdev)
 	if err != nil {
 		return "", "", err
@@ -927,6 +930,26 @@ func (nc *DefaultNodeNetworkController) Init(ctx context.Context) error {
 
 	nodeAnnotator := kube.NewNodeAnnotator(nc.Kube, node.Name)
 
+	// Use the device from environment when the DP resource name is specified.
+	if config.OvnKubeNode.MgmtPortDPResourceName != "" {
+		if err := handleDevicePluginResources(); err != nil {
+			return err
+		}
+
+		netdevice, err := handleNetdevResources(config.OvnKubeNode.MgmtPortDPResourceName)
+		if err != nil {
+			return err
+		}
+
+		if config.OvnKubeNode.MgmtPortNetdev != "" {
+			klog.Warningf("MgmtPortNetdev is set explicitly (%s), overriding with resource...",
+				config.OvnKubeNode.MgmtPortNetdev)
+		}
+		config.OvnKubeNode.MgmtPortNetdev = netdevice
+		klog.V(5).Infof("Using MgmtPortNetdev (Netdev %s) passed via resource %s",
+			config.OvnKubeNode.MgmtPortNetdev, config.OvnKubeNode.MgmtPortDPResourceName)
+	}
+
 	// Setup management ports
 	nc.mgmtPortController, err = createNodeManagementPortController(
 		node,
@@ -1010,26 +1033,6 @@ func (nc *DefaultNodeNetworkController) Start(ctx context.Context) error {
 
 	nodeAnnotator := kube.NewNodeAnnotator(nc.Kube, node.Name)
 	waiter := newStartupWaiter()
-
-	// Use the device from environment when the DP resource name is specified.
-	if config.OvnKubeNode.MgmtPortDPResourceName != "" {
-		if err := handleDevicePluginResources(); err != nil {
-			return err
-		}
-
-		netdevice, err := handleNetdevResources(config.OvnKubeNode.MgmtPortDPResourceName)
-		if err != nil {
-			return err
-		}
-
-		if config.OvnKubeNode.MgmtPortNetdev != "" {
-			klog.Warningf("MgmtPortNetdev is set explicitly (%s), overriding with resource...",
-				config.OvnKubeNode.MgmtPortNetdev)
-		}
-		config.OvnKubeNode.MgmtPortNetdev = netdevice
-		klog.V(5).Infof("Using MgmtPortNetdev (Netdev %s) passed via resource %s",
-			config.OvnKubeNode.MgmtPortNetdev, config.OvnKubeNode.MgmtPortDPResourceName)
-	}
 
 	// Complete gateway initialization
 	if config.OvnKubeNode.Mode == types.NodeModeDPUHost {
