@@ -84,7 +84,19 @@ func start(mp managementPort, stopChan <-chan struct{}) (func(), error) {
 							return true
 						}
 					},
-					mp.doReconcile,
+					func() error {
+						if err := mp.doReconcile(); err != nil {
+							// doReconcile may fail if the interface was deleted.
+							// In that case, try to recreate it. create() is idempotent
+							// and safe to call even if the interface already exists.
+							klog.Warningf("Failed to reconcile management port, attempting to recreate: %v", err)
+							if createErr := mp.create(); createErr != nil {
+								klog.Warningf("Failed to recreate management port: %v", createErr)
+							}
+							return err
+						}
+						return nil
+					},
 				)
 				if err != nil {
 					klog.Errorf("Failed to reconcile management port: %v", err)
