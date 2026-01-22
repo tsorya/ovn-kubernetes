@@ -112,10 +112,10 @@ func (ncm *NodeControllerManager) syncManagementPorts(validNetworks ...util.NetI
 
 	if config.OvnKubeNode.Mode != ovntypes.NodeModeDPUHost && ncm.ovsClient != nil {
 		// then get all existing management ports for primary UDNs
-		// internal management port map, key is managementPortIfName (types.K8sMgmtIntfNamePrefix + <networkID>), value is management port OVS interface name
+		// internal management port map, key is managementPortIfName (util.K8sMgmtIntfName()Prefix + <networkID>), value is management port OVS interface name
 		internalMgmtPorts := make(map[string]string)
 
-		// representor management port map, key is managementPortIfName (types.K8sMgmtIntfNamePrefix + <networkID>), value is management port OVS interface name and network name
+		// representor management port map, key is managementPortIfName (util.K8sMgmtIntfName()Prefix + <networkID>), value is management port OVS interface name and network name
 		type repInfo struct {
 			name    string // name of OVS interface name
 			netName string // network name
@@ -124,7 +124,7 @@ func (ncm *NodeControllerManager) syncManagementPorts(validNetworks ...util.NetI
 
 		// first find all internal management ports
 		p := func(item *vswitchd.Interface) bool {
-			if item.Type == "internal" && strings.HasPrefix(item.Name, ovntypes.K8sMgmtIntfNamePrefix) {
+			if item.Type == "internal" && strings.HasPrefix(item.Name, ovnutil.K8sMgmtIntfName()Prefix) {
 				return true
 			}
 			return false
@@ -178,7 +178,7 @@ func (ncm *NodeControllerManager) syncManagementPorts(validNetworks ...util.NetI
 		if err == nil {
 			for _, link := range links {
 				linkName := link.Attrs().Name
-				if !strings.HasPrefix(linkName, ovntypes.K8sMgmtIntfNamePrefix) {
+				if !strings.HasPrefix(linkName, ovnutil.K8sMgmtIntfName()Prefix) {
 					continue
 				}
 				if validMpx.Has(linkName) {
@@ -578,7 +578,7 @@ func checkForStaleOVSInternalPorts() {
 	staleInterfaceArgs := []string{}
 	values := strings.Split(stdout, "\n\n")
 	for _, val := range values {
-		if val == ovntypes.K8sMgmtIntfName || val == ovntypes.K8sMgmtIntfName+"_0" {
+		if val == ovnutil.K8sMgmtIntfName() || val == ovnutil.K8sMgmtIntfName()+"_0" {
 			klog.Errorf("Management port %s is missing. Perhaps the host rebooted "+
 				"or SR-IOV VFs were disabled on the host.", val)
 			continue

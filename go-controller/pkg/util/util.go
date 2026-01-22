@@ -219,6 +219,9 @@ func GetNodeAddresses(ipv4, ipv6 bool, nodes ...*corev1.Node) (ipsv4 []net.IP, i
 
 // GetNodeChassisID returns the machine's OVN chassis ID
 func GetNodeChassisID() (string, error) {
+	if GetOvnChassisName() != "" {
+		return GetOvnChassisName(), nil
+	}
 	chassisID, stderr, err := RunOVSVsctl("--if-exists", "get",
 		"Open_vSwitch", ".", "external_ids:system-id")
 	if err != nil {
@@ -1098,4 +1101,29 @@ func getPortName(name *string) string {
 		return ""
 	}
 	return *name
+}
+
+// GetOvnChassisName returns the configured OVN chassis name, or empty string if not set
+func GetOvnChassisName() string {
+	return config.Default.OvnChassisName
+}
+
+// GetOvnChassisNameSuffix returns the chassis name suffix used for external IDs.
+// Returns "-<chassisname>" if OvnChassisName is set, empty string otherwise.
+func GetOvnChassisNameSuffix() string {
+	if config.Default.OvnChassisName == "" {
+		return ""
+	}
+	return "-" + config.Default.OvnChassisName
+}
+
+// K8sMgmtIntfName returns the management interface name.
+// Uses hash-based naming when OvnChassisName is set to support multiple instances.
+func K8sMgmtIntfName() string {
+	if config.Default.OvnChassisName == "" {
+		return types.K8sMgmtIntfNamePrefix + "0"
+	}
+	h := fnv.New32()
+	h.Write([]byte(config.Default.OvnChassisName))
+	return fmt.Sprintf("%s%d", types.K8sMgmtIntfNamePrefix, h.Sum32()%100)
 }

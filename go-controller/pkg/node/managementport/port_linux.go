@@ -93,7 +93,7 @@ func NewManagementPortController(
 		c.ports[netdevPort] = newManagementPortNetdev(netdevDevName, cfg, routeManager)
 	}
 	if hasRepresentor {
-		ifName := types.K8sMgmtIntfName
+		ifName := util.K8sMgmtIntfName()
 		if hasNetdev {
 			ifName += "_0"
 		}
@@ -112,9 +112,9 @@ func NewManagementPortController(
 // GetInterfaceName of the management port
 func (c *managementPortController) GetInterfaceName() string {
 	if c.ports[representorPort] != nil && c.ports[netdevPort] != nil {
-		return types.K8sMgmtIntfName + "_0"
+		return util.K8sMgmtIntfName() + "_0"
 	}
-	return types.K8sMgmtIntfName
+	return util.K8sMgmtIntfName()
 }
 
 func (c *managementPortController) start(stopChan <-chan struct{}) error {
@@ -161,7 +161,7 @@ func newManagementPortOVS(cfg *managementPortConfig, routeManager *routemanager.
 }
 
 func (mp *managementPortOVS) create() error {
-	for _, mgmtPortName := range []string{types.K8sMgmtIntfName, types.K8sMgmtIntfName + "_0"} {
+	for _, mgmtPortName := range []string{util.K8sMgmtIntfName(), util.K8sMgmtIntfName() + "_0"} {
 		if err := syncMgmtPortInterface(mgmtPortName, true); err != nil {
 			return fmt.Errorf("failed to sync management port: %v", err)
 		}
@@ -171,15 +171,15 @@ func (mp *managementPortOVS) create() error {
 	legacyMgmtIntfName := util.GetLegacyK8sMgmtIntfName(mp.cfg.nodeName)
 	stdout, stderr, err := util.RunOVSVsctl(
 		"--", "--if-exists", "del-port", "br-int", legacyMgmtIntfName,
-		"--", "--may-exist", "add-port", "br-int", types.K8sMgmtIntfName,
-		"--", "set", "interface", types.K8sMgmtIntfName, fmt.Sprintf("mac=\"%s\"", mp.cfg.mpMAC.String()),
+		"--", "--may-exist", "add-port", "br-int", util.K8sMgmtIntfName(),
+		"--", "set", "interface", util.K8sMgmtIntfName(), fmt.Sprintf("mac=\"%s\"", mp.cfg.mpMAC.String()),
 		"type=internal", "mtu_request="+fmt.Sprintf("%d", config.Default.MTU),
 		"external-ids:iface-id="+types.K8sPrefix+mp.cfg.nodeName)
 	if err != nil {
 		return fmt.Errorf("failed to add port to br-int: stdout %q, stderr %q, error: %w", stdout, stderr, err)
 	}
 
-	return createPlatformManagementPort(types.K8sMgmtIntfName, mp.cfg, mp.routeManager)
+	return createPlatformManagementPort(util.K8sMgmtIntfName(), mp.cfg, mp.routeManager)
 }
 
 func (mp *managementPortOVS) reconcilePeriod() time.Duration {
@@ -187,7 +187,7 @@ func (mp *managementPortOVS) reconcilePeriod() time.Duration {
 }
 
 func (mp *managementPortOVS) doReconcile() error {
-	return createPlatformManagementPort(types.K8sMgmtIntfName, mp.cfg, mp.routeManager)
+	return createPlatformManagementPort(util.K8sMgmtIntfName(), mp.cfg, mp.routeManager)
 }
 
 func tearDownManagementPortConfig(link netlink.Link) error {
@@ -258,15 +258,15 @@ func setupManagementPortIPFamilyConfig(link netlink.Link, mpcfg *managementPortC
 	// K8s Node IP. OVN Logical Router pipeline drops such packets since it expects
 	// source protocol address to be in the Logical Switch's subnet.
 	if exists, err = util.LinkNeighExists(link, cfg.gwIP, mpcfg.gwMAC); err == nil && !exists {
-		klog.Warningf("Missing arp entry for MAC/IP binding (%s/%s) on link %s", mpcfg.gwMAC.String(), cfg.gwIP, types.K8sMgmtIntfName)
+		klog.Warningf("Missing arp entry for MAC/IP binding (%s/%s) on link %s", mpcfg.gwMAC.String(), cfg.gwIP, util.K8sMgmtIntfName())
 		// LinkNeighExists checks if the mac also matches, but it is possible there is a stale entry
 		// still in the neighbor cache which would prevent add. Therefore execute a delete first if an IP entry exists.
 		if exists, err = util.LinkNeighIPExists(link, cfg.gwIP); err != nil {
-			klog.Warningf("Could not detect if stale IP neighbor entry exists for IP %s, on iface %s: %v", cfg.gwIP.String(), types.K8sMgmtIntfName, err)
+			klog.Warningf("Could not detect if stale IP neighbor entry exists for IP %s, on iface %s: %v", cfg.gwIP.String(), util.K8sMgmtIntfName(), err)
 		} else if exists {
-			klog.Warningf("Found stale neighbor entry IP binding (%s) on link %s", cfg.gwIP.String(), types.K8sMgmtIntfName)
+			klog.Warningf("Found stale neighbor entry IP binding (%s) on link %s", cfg.gwIP.String(), util.K8sMgmtIntfName())
 			if err = util.LinkNeighDel(link, cfg.gwIP); err != nil {
-				klog.Warningf("Could not remove remove stale IP neighbor entry for IP %s, on iface %s: %v", cfg.gwIP.String(), types.K8sMgmtIntfName, err)
+				klog.Warningf("Could not remove remove stale IP neighbor entry for IP %s, on iface %s: %v", cfg.gwIP.String(), util.K8sMgmtIntfName(), err)
 			}
 		}
 		err = util.LinkNeighAdd(link, cfg.gwIP, mpcfg.gwMAC)
@@ -282,7 +282,7 @@ func setupManagementPortIPFamilyConfig(link netlink.Link, mpcfg *managementPortC
 
 	// IPv6 forwarding is enabled globally
 	if protocol == iptables.ProtocolIPv4 {
-		err := util.SetforwardingModeForInterface(types.K8sMgmtIntfName)
+		err := util.SetforwardingModeForInterface(util.K8sMgmtIntfName())
 		if err != nil {
 			klog.Warning(err)
 		}
@@ -651,7 +651,7 @@ func DelLegacyMgtPortIptRules() {
 	if err != nil {
 		return
 	}
-	rule := []string{"-o", types.K8sMgmtIntfName, "-j", iptableMgmPortChain}
+	rule := []string{"-o", util.K8sMgmtIntfName(), "-j", iptableMgmPortChain}
 	_ = ipt.Delete("nat", "POSTROUTING", rule...)
 	_ = ipt6.Delete("nat", "POSTROUTING", rule...)
 	_ = ipt.ClearChain("nat", iptableMgmPortChain)
@@ -670,7 +670,7 @@ func initMgmPortRoutingRules(mgmtCfg *managementPortConfig) error {
 		gatewayIP := mgmtCfg.netInfo.GetNodeGatewayIP(hostSubnet).IP.String()
 		for _, svcCIDR := range config.Kubernetes.ServiceCIDRs {
 			if isIPv6 == utilnet.IsIPv6CIDR(svcCIDR) {
-				if stdout, stderr, err := util.RunIP("route", "replace", "table", ovnkubeSvcViaMgmPortRT, svcCIDR.String(), "via", gatewayIP, "dev", types.K8sMgmtIntfName); err != nil {
+				if stdout, stderr, err := util.RunIP("route", "replace", "table", ovnkubeSvcViaMgmPortRT, svcCIDR.String(), "via", gatewayIP, "dev", util.K8sMgmtIntfName()); err != nil {
 					return fmt.Errorf("error adding routing table entry into custom routing table: %s: stdout: %s, stderr: %s, err: %v", ovnkubeSvcViaMgmPortRT, stdout, stderr, err)
 				}
 				klog.V(5).Infof("Successfully added route into custom routing table: %s", ovnkubeSvcViaMgmPortRT)
@@ -706,7 +706,7 @@ func initMgmPortRoutingRules(mgmtCfg *managementPortConfig) error {
 	// lastly update the reverse path filtering options for ovn-k8s-mp0 interface to avoid dropping return packets
 	// NOTE: v6 doesn't have rp_filter strict mode block
 	if config.IPv4Mode {
-		return util.SetRPFilterLooseModeForInterface(types.K8sMgmtIntfName)
+		return util.SetRPFilterLooseModeForInterface(util.K8sMgmtIntfName())
 	}
 	return nil
 }

@@ -330,6 +330,9 @@ type DefaultConfig struct {
 	// BridgeName is the name of the OVS integration bridge
 	BridgeName string `gcfg:"bridge-name"`
 
+	// OvnChassisName is a unique identifier for this OVN instance (used for multi-instance deployments)
+	OvnChassisName string `gcfg:"ovn-chassis-name"`
+
 
 	// RawUDNAllowedDefaultServices holds the unparsed UDNAllowedDefaultServices. Should only be
 	// used inside config module.
@@ -1025,6 +1028,12 @@ var CommonFlags = []cli.Flag{
 		Usage:       "zone name to which ovnkube-node/ovnkube-controller belongs to",
 		Value:       Default.Zone,
 		Destination: &cliConfig.Default.Zone,
+	},
+	&cli.StringFlag{
+		Name:        "ovn-chassis-name",
+		Usage:       "unique identifier for this OVN instance (used for multi-instance deployments)",
+		Value:       Default.OvnChassisName,
+		Destination: &cliConfig.Default.OvnChassisName,
 	},
 	&cli.StringFlag{
 		Name: "udn-allowed-default-services",
@@ -1829,6 +1838,9 @@ func runOVSVsctl(exec kexec.Interface, args ...string) (string, error) {
 }
 
 func getOVSExternalID(exec kexec.Interface, name string) string {
+	if Default.OvnChassisName != "" {
+		name = name + "-" + Default.OvnChassisName
+	}
 	out, err := runOVSVsctl(exec,
 		"--if-exists",
 		"get",
@@ -1843,6 +1855,9 @@ func getOVSExternalID(exec kexec.Interface, name string) string {
 }
 
 func setOVSExternalID(exec kexec.Interface, key, value string) error {
+	if Default.OvnChassisName != "" {
+		key = key + "-" + Default.OvnChassisName
+	}
 	out, err := runOVSVsctl(exec,
 		"set",
 		"Open_vSwitch",

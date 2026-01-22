@@ -587,7 +587,7 @@ func exportManagementPortAnnotation(netdevName string, nodeAnnotator kube.Annota
 
 // Take care of alternative names for the netdevName by making sure we
 // use the link attribute name as well as handle the case when netdevName
-// was renamed to types.K8sMgmtIntfName
+// was renamed to util.K8sMgmtIntfName()
 func getManagementPortNetDev(netdevName string) (string, error) {
 	link, err := util.GetNetLinkOps().LinkByName(netdevName)
 	if err != nil {
@@ -596,7 +596,7 @@ func getManagementPortNetDev(netdevName string) (string, error) {
 		}
 		// this may not the first time invoked on the node after reboot
 		// netdev may have already been renamed to ovn-k8s-mp0.
-		link, err = util.GetNetLinkOps().LinkByName(types.K8sMgmtIntfName)
+		link, err = util.GetNetLinkOps().LinkByName(util.K8sMgmtIntfName())
 		if err != nil {
 			return "", fmt.Errorf("failed to get link device for %s. %v", netdevName, err)
 		}

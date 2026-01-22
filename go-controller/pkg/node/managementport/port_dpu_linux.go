@@ -27,7 +27,7 @@ type managementPortRepresentor struct {
 
 // newManagementPortRepresentor creates a new managementPort representor
 // For management port representor only.
-// name is types.K8sMgmtIntfName (on dpu mode node) or types.K8sMgmtIntfName+"_0" (on full mode)
+// name is util.K8sMgmtIntfName() (on dpu mode node) or util.K8sMgmtIntfName()+"_0" (on full mode)
 // repDevName is the representor VF device name
 func newManagementPortRepresentor(name, repDevName string, cfg *managementPortConfig) *managementPortRepresentor {
 	return &managementPortRepresentor{
@@ -59,7 +59,7 @@ func (mp *managementPortRepresentor) create() error {
 	}
 	// connect representor port to br-int, set OvnManagementPortNameExternalID external-id to indicate its
 	// associated network name and management port device name
-	externalIDs := []string{fmt.Sprintf("%s=%s", types.OvnManagementPortNameExternalID, types.K8sMgmtIntfName)}
+	externalIDs := []string{fmt.Sprintf("%s=%s", types.OvnManagementPortNameExternalID, util.K8sMgmtIntfName())}
 	if mp.repDevName != mp.ifName {
 		externalIDs = append(externalIDs, fmt.Sprintf("ovn-orig-mgmt-port-rep-name=%s", mp.repDevName))
 	}
@@ -113,7 +113,7 @@ type managementPortNetdev struct {
 // newManagementPortNetdev creates a new managementPortNetdev
 func newManagementPortNetdev(netdevDevName string, cfg *managementPortConfig, routeManager *routemanager.Controller) *managementPortNetdev {
 	return &managementPortNetdev{
-		ifName:        types.K8sMgmtIntfName,
+		ifName:        util.K8sMgmtIntfName(),
 		netdevDevName: netdevDevName,
 		cfg:           cfg,
 		routeManager:  routeManager,
