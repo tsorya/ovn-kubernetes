@@ -146,6 +146,11 @@ func GetGatewayRouterFromNode(node string) string {
 	return types.GWRouterPrefix + node
 }
 
+// GetOvnBridgeName returns the name of the OVS integration bridge
+func GetOvnBridgeName() string {
+	return config.Default.BridgeName
+}
+
 // GetExtSwitchFromNode determines a node's corresponding gateway router name
 func GetExtSwitchFromNode(node string) string {
 	return types.ExternalSwitchPrefix + node
@@ -160,7 +165,7 @@ func GetExtPortName(bridgeID, nodeName string) string {
 // GetPatchPortName determines the name of the patch port on the external
 // bridge, which connects to br-int
 func GetPatchPortName(bridgeID, nodeName string) string {
-	return types.PatchPortPrefix + GetExtPortName(bridgeID, nodeName) + types.PatchPortSuffix
+	return types.PatchPortPrefix + GetExtPortName(bridgeID, nodeName) + types.GetPatchPortSuffix(GetOvnBridgeName())
 }
 
 // GetNodeInternalAddrs returns the first IPv4 and/or IPv6 InternalIP defined

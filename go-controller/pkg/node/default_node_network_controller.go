@@ -443,6 +443,7 @@ func setupOVNNode(node *corev1.Node) error {
 		fmt.Sprintf("external_ids:ovn-enable-lflow-cache=%t", config.Default.LFlowCacheEnable),
 		// when creating tunnel ports set local_ip, helps ensures multiple interfaces and ipv6 will work
 		"external_ids:ovn-set-local-ip=\"true\"",
+		fmt.Sprintf("external_ids:ovn-bridge=%s", util.GetOvnBridgeName()),
 	}
 
 	if config.Default.LFlowCacheLimit > 0 {

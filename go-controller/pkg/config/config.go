@@ -327,6 +327,9 @@ type DefaultConfig struct {
 
 	// Zone name to which ovnkube-node/ovnkube-controller belongs to
 	Zone string `gcfg:"zone"`
+	// BridgeName is the name of the OVS integration bridge
+	BridgeName string `gcfg:"bridge-name"`
+
 
 	// RawUDNAllowedDefaultServices holds the unparsed UDNAllowedDefaultServices. Should only be
 	// used inside config module.
@@ -2320,6 +2323,10 @@ func buildDefaultConfig(cli, file *config) error {
 
 	if Default.Zone == "" {
 		Default.Zone = types.OvnDefaultZone
+	}
+
+	if Default.BridgeName == "" {
+		Default.BridgeName = types.DefaultBridgeName
 	}
 	return nil
 }

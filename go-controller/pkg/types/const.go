@@ -51,7 +51,8 @@ const (
 	GWRouterToExtSwitchPrefix  = "rtoe-"
 	EgressGWSwitchPrefix       = "exgw-"
 	PatchPortPrefix            = "patch-"
-	PatchPortSuffix            = "-to-br-int"
+	// DefaultBridgeName is the default name for the OVS integration bridge
+	DefaultBridgeName = "br-int"
 
 	// types.OVNLayer2Switch is the name of layer2 topology switch
 	OVNLayer2Switch = "ovn_layer2_switch"
@@ -348,3 +349,8 @@ const (
 	NFTMgmtPortNoSNATSubnetsV4 = "mgmtport-no-snat-subnets-v4"
 	NFTMgmtPortNoSNATSubnetsV6 = "mgmtport-no-snat-subnets-v6"
 )
+
+// GetPatchPortSuffix returns the patch port suffix for the given bridge name.
+func GetPatchPortSuffix(bridgeName string) string {
+	return "-to-" + bridgeName
+}
