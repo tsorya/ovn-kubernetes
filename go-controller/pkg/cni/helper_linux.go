@@ -501,7 +501,8 @@ func setupSriovInterface(netns ns.NetNS, containerID, ifName string, ifInfo *Pod
 }
 
 func getPfEncapIP(deviceID string) (string, error) {
-	stdout, err := ovsGet("Open_vSwitch", ".", "external_ids", "ovn-pf-encap-ip-mapping")
+	stdout, err := encapIPMappingKey := fmt.Sprintf("ovn-pf-encap-ip-mapping%s", util.GetOvnChassisNameSuffix())
+	stdout, err := ovsGet("Open_vSwitch", ".", "external_ids", encapIPMappingKey)
 	if err != nil {
 		return "", fmt.Errorf("failed to get ovn-pf-encap-ip-mapping, error: %v", err)
 	}
@@ -862,7 +863,7 @@ func (*defaultPodRequestInterfaceOps) UnconfigureInterface(pr *PodRequest, ifInf
 					pr.CNIConf.DeviceID, podDesc, err)
 			}
 		}
-		portList, err := ovsFind("interface", "name", "external-ids:sandbox="+pr.SandboxID)
+		portList, err := ovsFind("interface", "name", "external-ids:sandbox="+pr.SandboxID, "external-ids:bridge-name="+util.GetOvnBridgeName())
 		if err != nil {
 			return fmt.Errorf("failed to list interfaces in OVS during delete for sandbox: %s, err: %w",
 				pr.SandboxID, err)

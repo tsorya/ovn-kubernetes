@@ -379,7 +379,8 @@ func (pr *PodRequest) cmdDel(clientset *ClientSet) (*Response, error) {
 			}
 		} else {
 			// Find the hostInterface name
-			condString := []string{"external-ids:sandbox=" + pr.SandboxID}
+			bridgeName := util.GetOvnBridgeName()
+			condString := []string{"external-ids:sandbox=" + pr.SandboxID, "external-ids:bridge-name=" + bridgeName}
 			condString = append(condString, fmt.Sprintf("external_ids:pod-if-name=%s", pr.IfName))
 			ovsIfNames, err := ovsFind("Interface", "name", condString...)
 			if err != nil || len(ovsIfNames) != 1 {

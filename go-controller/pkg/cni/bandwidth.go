@@ -1,6 +1,7 @@
 package cni
 
 import (
+	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/util"
 	"fmt"
 	"strconv"
 	"strings"
@@ -8,7 +9,8 @@ import (
 
 func clearPodBandwidth(sandboxID string) error {
 	// interfaces will have the same name as ports
-	portList, err := ovsFind("interface", "name", "external-ids:sandbox="+sandboxID)
+	bridgeName := util.GetOvnBridgeName()
+	portList, err := ovsFind("interface", "name", "external-ids:sandbox="+sandboxID, "external-ids:bridge-name="+bridgeName)
 	if err != nil {
 		return err
 	}
@@ -25,7 +27,8 @@ func clearPodBandwidthForPorts(portList []string, sandboxID string) error {
 	}
 
 	// Now that the QoS is unused remove it
-	qosList, err := ovsFind("qos", "_uuid", "external-ids:sandbox="+sandboxID)
+	bridgeName := util.GetOvnBridgeName()
+	qosList, err := ovsFind("qos", "_uuid", "external-ids:sandbox="+sandboxID, "external-ids:bridge-name="+bridgeName)
 	if err != nil {
 		return err
 	}
@@ -42,7 +45,7 @@ func setPodBandwidth(sandboxID, ifname string, ingressBPS, egressBPS int64) erro
 	// note pod ingress == OVS egress and vice versa
 
 	if ingressBPS > 0 {
-		qos, err := ovsCreate("qos", "type=linux-htb", fmt.Sprintf("other-config:max-rate=%d", ingressBPS), "external-ids=sandbox="+sandboxID)
+		qos, err := ovsCreate("qos", "type=linux-htb", fmt.Sprintf("other-config:max-rate=%d", ingressBPS), "external-ids:sandbox="+sandboxID, "external-ids:bridge-name="+util.GetOvnBridgeName())
 		if err != nil {
 			return err
 		}
