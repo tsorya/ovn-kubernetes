@@ -484,6 +484,9 @@ func (nc *DefaultNodeNetworkController) initGatewayDPUHostPreStart(kubeNodeIP ne
 		readyFunc:    func() (bool, error) { return true, nil },
 		watchFactory: nc.watchFactory.(*factory.WatchFactory),
 		nextHops:     gatewayNextHops,
+		// DPU Host mode specific: provide route manager and node name for route reconciliation
+		routeManager: nc.routeManager,
+		nodeName:     nc.name,
 	}
 	return nil
 }
