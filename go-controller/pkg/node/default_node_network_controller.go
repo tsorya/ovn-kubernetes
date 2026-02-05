@@ -635,6 +635,7 @@ func getMgmtPortAndRepNameModeDPU(node *corev1.Node) (string, string, error) {
 		return "", "", err
 	}
 	cfg, ok := cfgs[types.DefaultNetworkName]
+        klog.Infof("AAAAAAAAAAAA PF_ID=%d and FC_ID=%d", cfg.PfId, cfg.FuncId)
 	if !ok {
 		return "", "", fmt.Errorf("failed to find management port details for %s network", types.DefaultNetworkName)
 	}
