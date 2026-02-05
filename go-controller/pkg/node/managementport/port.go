@@ -4,9 +4,9 @@ import (
 	"net"
 	"time"
 
-	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/util/retry"
 	"k8s.io/klog/v2"
+
+	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/util"
 )
 
 // Interface holds information about the management port that connects the OVN
@@ -57,41 +57,21 @@ func start(mp managementPort, stopChan <-chan struct{}) (func(), error) {
 	if err != nil {
 		return func() {}, err
 	}
-	reconcileCh := make(chan struct{}, 1)
-	reconcile := func() { reconcileCh <- struct{}{} }
-	go func() {
-		timer := time.NewTicker(mp.reconcilePeriod())
-		defer timer.Stop()
-		for {
-			select {
-			case <-stopChan:
-				return
-			case <-timer.C:
-				reconcile()
-			case <-reconcileCh:
-				err := retry.OnError(
-					wait.Backoff{
-						Duration: 10 * time.Millisecond,
-						Steps:    4,
-						Factor:   5.0,
-						Cap:      mp.reconcilePeriod(),
-					},
-					func(error) bool {
-						select {
-						case <-stopChan:
-							return false
-						default:
-							return true
-						}
-					},
-					mp.doReconcile,
-				)
-				if err != nil {
-					klog.Errorf("Failed to reconcile management port: %v", err)
-				}
+	reconcileCh := util.RunReconcileLoop(
+		"management port",
+		stopChan,
+		nil,
+		mp.reconcilePeriod(),
+		func() error {
+			if err := mp.doReconcile(); err != nil {
+				// doReconcile may fail if the interface was deleted.
+				// In that case, try to recreate it. create() is idempotent
+				// and safe to call even if the interface already exists.
+				klog.Errorf("Failed to reconcile management port, attempting to recreate: %v", err)
+				return mp.create()
 			}
-			timer.Reset(mp.reconcilePeriod())
-		}
-	}()
-	return reconcile, nil
+			return nil
+		},
+	)
+	return func() { reconcileCh <- struct{}{} }, nil
 }
