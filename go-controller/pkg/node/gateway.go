@@ -19,10 +19,17 @@ import (
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/kube"
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/node/bridgeconfig"
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/node/egressip"
+	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/node/routemanager"
+	nodeutil "github.com/ovn-org/ovn-kubernetes/go-controller/pkg/node/util"
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/retry"
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/types"
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/util"
 	utilerrors "github.com/ovn-org/ovn-kubernetes/go-controller/pkg/util/errors"
+)
+
+const (
+	// masqueradeReconcilePeriod is how often the masquerade reconciler runs in DPU Host mode
+	masqueradeReconcilePeriod = 30 * time.Second
 )
 
 // Gateway responds to Service and Endpoint K8s events
@@ -63,6 +70,10 @@ type gateway struct {
 	wg           *sync.WaitGroup
 
 	nextHops []net.IP
+
+	// DPU Host mode specific fields for route reconciliation
+	routeManager *routemanager.Controller
+	nodeName     string
 }
 
 func (g *gateway) AddService(svc *corev1.Service) error {
@@ -346,6 +357,55 @@ func (g *gateway) Start() error {
 
 	if g.nodeIPManager != nil {
 		g.nodeIPManager.Run(g.stopChan, g.wg)
+	}
+
+	// Start periodic masquerade reconciliation for DPU Host mode
+	if config.OvnKubeNode.Mode == types.NodeModeDPUHost {
+		g.runMasqueradeReconciler(g.stopChan, g.wg)
+	}
+
+	return nil
+}
+
+// runMasqueradeReconciler starts a periodic loop to reconcile masquerade IP and MAC bindings
+// on the gateway interface. This is only used in DPU Host mode where masquerade resources
+// need to be periodically verified and restored if removed.
+func (g *gateway) runMasqueradeReconciler(stopChan <-chan struct{}, wg *sync.WaitGroup) {
+	if config.Gateway.Interface == "" {
+		klog.Warning("Gateway interface not configured, skipping masquerade reconciler")
+		return
+	}
+
+	util.RunReconcileLoop("masquerade", stopChan, wg, masqueradeReconcilePeriod, g.doMasqueradeReconcile)
+}
+
+// doMasqueradeReconcile ensures the masquerade IP, MAC bindings, and routes exist on the gateway interface.
+func (g *gateway) doMasqueradeReconcile() error {
+	gwIface := config.Gateway.Interface
+	if err := setNodeMasqueradeIPOnExtBridge(gwIface); err != nil {
+		return fmt.Errorf("failed to set masquerade IP: %w", err)
+	}
+	if err := addHostMACBindings(gwIface); err != nil {
+		return fmt.Errorf("failed to add MAC bindings: %w", err)
+	}
+
+	// Reconcile routes only if route manager is available (DPU Host mode)
+	if g.routeManager != nil {
+		// Get current interface addresses for masquerade route
+		ifAddrs, err := nodeutil.GetNetworkInterfaceIPAddresses(gwIface)
+		if err != nil {
+			return fmt.Errorf("failed to get interface addresses for %s: %w", gwIface, err)
+		}
+
+		// Reconcile OVN masquerade route (169.254.0.1 dev <iface> src <nodeIP>)
+		if err := addMasqueradeRoute(g.routeManager, gwIface, g.nodeName, ifAddrs, g.watchFactory); err != nil {
+			return fmt.Errorf("failed to add masquerade route: %w", err)
+		}
+
+		// Reconcile service CIDR route (172.30.0.0/16 via 169.254.0.4 dev <iface>)
+		if err := configureSvcRouteViaInterface(g.routeManager, gwIface, DummyNextHopIPs()); err != nil {
+			return fmt.Errorf("failed to configure service route: %w", err)
+		}
 	}
 
 	return nil

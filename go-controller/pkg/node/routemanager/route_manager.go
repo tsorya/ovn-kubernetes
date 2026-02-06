@@ -107,11 +107,16 @@ func (c *Controller) addRoute(r *netlink.Route) error {
 		// already managed - nothing to do
 		return nil
 	}
+	// Update the store first, before attempting to add to kernel.
+	// This ensures that if a route with the same key (dst/table/priority) but different
+	// attributes (e.g., LinkIndex changed after interface recreation) is being added,
+	// the store is updated even if the kernel add fails temporarily.
+	// The periodic sync will then retry with the correct attributes.
+	c.addRouteToStore(r)
 	err = c.netlinkAddRoute(r)
 	if err != nil {
 		return err
 	}
-	c.addRouteToStore(r)
 	return nil
 }
 
