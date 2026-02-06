@@ -124,27 +124,33 @@ func newManagementPortNetdev(netdevDevName, deviceID string, cfg *managementPort
 	}
 }
 
+// findNetdevByDeviceID attempts to find the netdev using PCI device ID when name lookup fails.
+// This handles the case where the interface name changes after DPU reboot.
+func (mp *managementPortNetdev) findNetdevByDeviceID() (netlink.Link, error) {
+	if mp.deviceID == "" {
+		return nil, fmt.Errorf("no device ID available for fallback lookup")
+	}
+
+	netdevName, err := util.GetNetdevNameFromDeviceId(mp.deviceID, nadapi.DeviceInfo{})
+	if err != nil || netdevName == "" {
+		return nil, fmt.Errorf("device ID lookup failed: %w", err)
+	}
+
+	link, err := util.GetNetLinkOps().LinkByName(netdevName)
+	if err != nil {
+		return nil, fmt.Errorf("device ID %s resolved to %s but LinkByName failed: %w", mp.deviceID, netdevName, err)
+	}
+
+	klog.Infof("Found netdev %s by device ID %s", netdevName, mp.deviceID)
+	return link, nil
+}
+
 func (mp *managementPortNetdev) create() error {
 	klog.Infof("Management port netdev create: netdevDevName=%s, deviceID=%s, ifName=%s", mp.netdevDevName, mp.deviceID, mp.ifName)
 	link, err := util.GetNetLinkOps().LinkByName(mp.netdevDevName)
 	if err != nil {
-		klog.Infof("Failed to find netdev by name '%s': %v, trying device ID lookup", mp.netdevDevName, err)
 		// Name lookup failed, try by PCI device ID if available
-		if mp.deviceID != "" {
-			klog.Infof("Looking up netdev by device ID %s", mp.deviceID)
-			if netdevName, lookupErr := util.GetNetdevNameFromDeviceId(mp.deviceID, nadapi.DeviceInfo{}); lookupErr == nil && netdevName != "" {
-				link, err = util.GetNetLinkOps().LinkByName(netdevName)
-				if err == nil {
-					klog.Infof("Found netdev %s by device ID %s", netdevName, mp.deviceID)
-				} else {
-					klog.Warningf("Device ID lookup found name %s but LinkByName failed: %v", netdevName, err)
-				}
-			} else {
-				klog.Warningf("Device ID lookup failed: %v", lookupErr)
-			}
-		} else {
-			klog.Warning("No device ID available for fallback lookup")
-		}
+		link, err = mp.findNetdevByDeviceID()
 		if err != nil {
 			return fmt.Errorf("failed to find management port netdev (name=%s, deviceID=%s): %w", mp.netdevDevName, mp.deviceID, err)
 		}
