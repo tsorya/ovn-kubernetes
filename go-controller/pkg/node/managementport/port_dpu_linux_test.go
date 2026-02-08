@@ -222,6 +222,20 @@ var _ = Describe("Mananagement port DPU tests", func() {
 		})
 	})
 
+	Context("findNetdevByDeviceID", func() {
+		It("Returns error when deviceID is empty", func() {
+			mgmtPortDpuHost := &managementPortNetdev{
+				netdevDevName: "enp3s0f0v0",
+				deviceID:      "",
+			}
+
+			link, err := mgmtPortDpuHost.findNetdevByDeviceID()
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("no device ID available"))
+			Expect(link).To(BeNil())
+		})
+	})
+
 	Context("Create Management port DPU host", func() {
 		It("Fails if netdev link lookup failed", func() {
 			mgmtPortDpuHost := managementPortNetdev{
@@ -258,7 +272,7 @@ var _ = Describe("Mananagement port DPU tests", func() {
 			cfg := &managementPortConfig{
 				hostSubnets: []*net.IPNet{ipnet},
 			}
-			mgmtPortDpuHost := newManagementPortNetdev("enp3s0f0v0", cfg, nil)
+			mgmtPortDpuHost := newManagementPortNetdev("enp3s0f0v0", "", cfg, nil)
 			linkMock := &mocks.Link{}
 			linkMock.On("Attrs").Return(&netlink.LinkAttrs{
 				Name: "enp3s0f0v0", MTU: 1500, HardwareAddr: currentMgmtPortMac})
