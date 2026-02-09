@@ -23,9 +23,15 @@ type key struct {
 	priority int
 }
 
+// managedRoute holds a route along with its interface name for LinkIndex recovery
+type managedRoute struct {
+	route     *netlink.Route
+	ifaceName string // interface name for resolving LinkIndex if it changes (e.g., after interface recreation)
+}
+
 type Controller struct {
 	*sync.Mutex
-	store map[key]*netlink.Route
+	store map[key]*managedRoute
 }
 
 // NewController manages routes which include adding and deletion of routes. It
@@ -36,7 +42,7 @@ type Controller struct {
 func NewController() *Controller {
 	return &Controller{
 		Mutex: &sync.Mutex{},
-		store: make(map[key]*netlink.Route),
+		store: make(map[key]*managedRoute),
 	}
 }
 
@@ -107,16 +113,21 @@ func (c *Controller) addRoute(r *netlink.Route) error {
 		// already managed - nothing to do
 		return nil
 	}
-	// Update the store first, before attempting to add to kernel.
-	// This ensures that if a route with the same key (dst/table/priority) but different
-	// attributes (e.g., LinkIndex changed after interface recreation) is being added,
-	// the store is updated even if the kernel add fails temporarily.
-	// The periodic sync will then retry with the correct attributes.
-	c.addRouteToStore(r)
+
+	// Look up interface name from LinkIndex for later recovery if LinkIndex changes
+	var ifaceName string
+	if r.LinkIndex != 0 {
+		link, err := util.GetNetLinkOps().LinkByIndex(r.LinkIndex)
+		if err == nil {
+			ifaceName = link.Attrs().Name
+		}
+	}
+
 	err = c.netlinkAddRoute(r)
 	if err != nil {
 		return err
 	}
+	c.addRouteToStore(r, ifaceName)
 	return nil
 }
 
@@ -132,9 +143,9 @@ func (c *Controller) delRoute(r *netlink.Route) error {
 		return err
 	}
 	// also remove the route we had in store if different
-	o := c.store[keyFromNetlink(r)]
-	if o != nil && !util.RouteEqual(r, o) {
-		err = c.netlinkDelRoute(o)
+	managed := c.store[keyFromNetlink(r)]
+	if managed != nil && !util.RouteEqual(r, managed.route) {
+		err = c.netlinkDelRoute(managed.route)
 		if err != nil {
 			return err
 		}
@@ -148,12 +159,12 @@ func (c *Controller) delRoute(r *netlink.Route) error {
 func (c *Controller) processNetlinkEvent(ru netlink.RouteUpdate) error {
 	c.Lock()
 	defer c.Unlock()
-	r := c.store[keyFromNetlink(&ru.Route)]
-	if r == nil {
+	managed := c.store[keyFromNetlink(&ru.Route)]
+	if managed == nil {
 		return nil
 	}
-	if ru.Type == unix.RTM_DELROUTE || !routePartiallyEqualWantedToExisting(r, &ru.Route) {
-		return c.netlinkAddRoute(r)
+	if ru.Type == unix.RTM_DELROUTE || !routePartiallyEqualWantedToExisting(managed.route, &ru.Route) {
+		return c.netlinkAddRoute(managed.route)
 	}
 	return nil
 }
@@ -178,9 +189,12 @@ func (c *Controller) netlinkDelRoute(r *netlink.Route) error {
 
 // addRouteToStore adds routes to the internal cache
 // Must be called with the controller locked
-func (c *Controller) addRouteToStore(r *netlink.Route) {
-	route := keyFromNetlink(r)
-	c.store[route] = r
+func (c *Controller) addRouteToStore(r *netlink.Route, ifaceName string) {
+	k := keyFromNetlink(r)
+	c.store[k] = &managedRoute{
+		route:     r,
+		ifaceName: ifaceName,
+	}
 }
 
 // removeRouteFromStore removes route from the internal cache
@@ -192,8 +206,8 @@ func (c *Controller) removeRouteFromStore(r *netlink.Route) {
 // hasRouteInStore checks if a route with the same key is stored in the
 // internal cache as requested. Must be called with the controller locked
 func (c *Controller) hasRouteInStore(r *netlink.Route) bool {
-	route := c.store[keyFromNetlink(r)]
-	return route != nil && util.RouteEqual(r, route)
+	managed := c.store[keyFromNetlink(r)]
+	return managed != nil && util.RouteEqual(r, managed.route)
 }
 
 func validateAndNormalizeRoute(r *netlink.Route) (*netlink.Route, error) {
@@ -251,16 +265,16 @@ func (c *Controller) sync() {
 	existingAndTracked := map[key][]*netlink.Route{}
 	for _, r := range existing {
 		key := keyFromNetlink(&r)
-		wants := c.store[key]
-		if wants == nil {
+		managed := c.store[key]
+		if managed == nil {
 			continue
 		}
 		existingAndTracked[key] = append(existingAndTracked[key], &r)
 	}
 
-	for key, wants := range c.store {
+	for key, managed := range c.store {
 		existing := existingAndTracked[key]
-		if len(existing) == 1 && routePartiallyEqualWantedToExisting(wants, existing[0]) {
+		if len(existing) == 1 && routePartiallyEqualWantedToExisting(managed.route, existing[0]) {
 			continue
 		}
 		// take the safe approach to delete routes before adding ours to make
@@ -276,7 +290,19 @@ func (c *Controller) sync() {
 			klog.Warningf("Route Manager: removed unexpected route %s", r)
 			deleted++
 		}
-		err := c.netlinkAddRoute(wants)
+		err := c.netlinkAddRoute(managed.route)
+		if err != nil && managed.ifaceName != "" {
+			// On failure, try resolving current LinkIndex from interface name.
+			// This handles cases where the interface was recreated (e.g., after DPU reboot)
+			// and the LinkIndex changed.
+			link, linkErr := util.GetNetLinkOps().LinkByName(managed.ifaceName)
+			if linkErr == nil && link.Attrs().Index != managed.route.LinkIndex {
+				klog.Infof("Route Manager: interface %s LinkIndex changed from %d to %d, retrying route add",
+					managed.ifaceName, managed.route.LinkIndex, link.Attrs().Index)
+				managed.route.LinkIndex = link.Attrs().Index
+				err = c.netlinkAddRoute(managed.route)
+			}
+		}
 		if err != nil {
 			klog.Errorf("Route Manager: failed while syncing: %v", err)
 			continue
