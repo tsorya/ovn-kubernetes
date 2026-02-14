@@ -2095,6 +2095,62 @@ func setNodeMasqueradeIPOnExtBridge(extBridgeName string) error {
 	return nil
 }
 
+// masqueradeIPsConfigured checks if the masquerade IP addresses are configured
+// on the given interface. This is used as a quick check to determine if
+// masquerade resources need to be restored (e.g., after a DPU reboot).
+func masqueradeIPsConfigured(ifaceName string) bool {
+	link, err := util.GetNetLinkOps().LinkByName(ifaceName)
+	if err != nil {
+		return false
+	}
+	if config.IPv4Mode {
+		_, masqIPNet, _ := net.ParseCIDR(config.Gateway.V4MasqueradeSubnet)
+		masqIPNet.IP = config.Gateway.MasqueradeIPs.V4HostMasqueradeIP
+		exists, err := util.LinkAddrExist(link, masqIPNet)
+		if err != nil || !exists {
+			return false
+		}
+	}
+	if config.IPv6Mode {
+		_, masqIPNet, _ := net.ParseCIDR(config.Gateway.V6MasqueradeSubnet)
+		masqIPNet.IP = config.Gateway.MasqueradeIPs.V6HostMasqueradeIP
+		exists, err := util.LinkAddrExist(link, masqIPNet)
+		if err != nil || !exists {
+			return false
+		}
+	}
+	return true
+}
+
+// ensureMasqueradeResources ensures that all masquerade-related resources
+// (MAC bindings, routes, and IP addresses) are configured on the gateway interface.
+// This function is idempotent and is used both during initial setup and
+// periodic reconciliation in DPU Host mode.
+// The masquerade IP is set last so it acts as a "commit marker": if any earlier
+// step fails, the IP remains absent and the reconciler will retry on the next tick.
+func ensureMasqueradeResources(routeManager *routemanager.Controller, gwIface, nodeName string, watchFactory factory.NodeWatchFactory) error {
+	if err := addHostMACBindings(gwIface); err != nil {
+		return fmt.Errorf("failed to add MAC bindings: %w", err)
+	}
+	ifAddrs, err := nodeutil.GetNetworkInterfaceIPAddresses(gwIface)
+	if err != nil {
+		return fmt.Errorf("failed to get interface addresses for %s: %w", gwIface, err)
+	}
+	if err := addMasqueradeRoute(routeManager, gwIface, nodeName, ifAddrs, watchFactory); err != nil {
+		return fmt.Errorf("failed to add masquerade route: %w", err)
+	}
+	if err := configureSvcRouteViaInterface(routeManager, gwIface, DummyNextHopIPs()); err != nil {
+		return fmt.Errorf("failed to configure service route: %w", err)
+	}
+	// Set masquerade IP last: it serves as a "commit marker" for the reconciler.
+	// If any step above fails, the IP stays absent and the next reconcile tick
+	// will detect the missing IP and retry everything.
+	if err := setNodeMasqueradeIPOnExtBridge(gwIface); err != nil {
+		return fmt.Errorf("failed to set masquerade IP: %w", err)
+	}
+	return nil
+}
+
 func addHostMACBindings(bridgeName string) error {
 	// Add a neighbour entry on the K8s node to map dummy next-hop masquerade
 	// addresses with MACs. This is required because these addresses do not

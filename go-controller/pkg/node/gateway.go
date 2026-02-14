@@ -19,6 +19,7 @@ import (
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/kube"
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/node/bridgeconfig"
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/node/egressip"
+	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/node/routemanager"
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/retry"
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/types"
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/util"
@@ -63,6 +64,10 @@ type gateway struct {
 	wg           *sync.WaitGroup
 
 	nextHops []net.IP
+
+	// DPU Host mode specific fields for route reconciliation
+	routeManager *routemanager.Controller
+	nodeName     string
 }
 
 func (g *gateway) AddService(svc *corev1.Service) error {
@@ -348,7 +353,40 @@ func (g *gateway) Start() error {
 		g.nodeIPManager.Run(g.stopChan, g.wg)
 	}
 
+	// Start periodic masquerade reconciliation for DPU Host mode
+	if config.OvnKubeNode.Mode == types.NodeModeDPUHost {
+		g.runMasqueradeReconciler(g.stopChan, g.wg)
+	}
+
 	return nil
+}
+
+// runMasqueradeReconciler starts a periodic loop to reconcile masquerade IP and MAC bindings
+// on the gateway interface. This is only used in DPU Host mode where masquerade resources
+// need to be periodically verified and restored if removed.
+func (g *gateway) runMasqueradeReconciler(stopChan <-chan struct{}, wg *sync.WaitGroup) {
+	if config.Gateway.Interface == "" {
+		klog.Warning("Gateway interface not configured, skipping masquerade reconciler")
+		return
+	}
+
+	const reconcilePeriod = 30 * time.Second
+	util.RunReconcileLoop("masquerade", stopChan, wg, reconcilePeriod, g.doMasqueradeReconcile)
+}
+
+// doMasqueradeReconcile checks if masquerade resources are present on the gateway interface
+// and restores them if missing. The masquerade IP is used as a canary — it is set last
+// by ensureMasqueradeResources, so its absence indicates either the interface was recreated
+// (e.g., DPU reboot) or a previous restore attempt failed partway through.
+// Routes are only re-added to the route manager when the canary is absent; once in the
+// store, the route manager's own sync loop keeps them applied to the kernel.
+func (g *gateway) doMasqueradeReconcile() error {
+	gwIface := config.Gateway.Interface
+	if masqueradeIPsConfigured(gwIface) {
+		return nil
+	}
+	klog.Warningf("Masquerade resources missing on %s, restoring", gwIface)
+	return ensureMasqueradeResources(g.routeManager, gwIface, g.nodeName, g.watchFactory)
 }
 
 // sets up an uplink interface for UDP Generic Receive Offload forwarding as part of
