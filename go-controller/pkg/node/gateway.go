@@ -65,7 +65,7 @@ type gateway struct {
 
 	nextHops []net.IP
 
-	// DPU Host mode specific fields for route reconciliation
+	// DPU Host mode specific fields for masquerade reconciliation
 	routeManager *routemanager.Controller
 	nodeName     string
 }
@@ -361,14 +361,23 @@ func (g *gateway) Start() error {
 	return nil
 }
 
-// runMasqueradeReconciler starts a periodic loop to reconcile masquerade IP and MAC bindings
+// runMasqueradeReconciler starts a periodic loop to reconcile masquerade resources
 // on the gateway interface. This is only used in DPU Host mode where masquerade resources
-// need to be periodically verified and restored if removed.
+// need to be periodically verified and restored if the interface is recreated.
+// It detects interface recreation by tracking the ifindex: when it changes, all masquerade
+// resources (IPs, routes, MAC bindings) are restored. The tracked ifindex is only updated
+// on full success, so partial failures trigger a retry on the next tick.
 func (g *gateway) runMasqueradeReconciler(stopChan <-chan struct{}, wg *sync.WaitGroup) {
-	if config.Gateway.Interface == "" {
+	gwIface := config.Gateway.Interface
+	if gwIface == "" {
 		klog.Warning("Gateway interface not configured, skipping masquerade reconciler")
 		return
 	}
+
+	// Start with ifindex 0 so the first tick always runs ensureMasqueradeResources.
+	// Real ifindex is always > 0, so the mismatch triggers a no-op idempotent restore.
+	// This avoids a LinkByName call that could fail and silently disable the reconciler.
+	lastIfIndex := 0
 
 	const reconcilePeriod = 30 * time.Second
 	wg.Add(1)
@@ -381,27 +390,31 @@ func (g *gateway) runMasqueradeReconciler(stopChan <-chan struct{}, wg *sync.Wai
 			case <-stopChan:
 				return
 			case <-ticker.C:
-				if err := g.doMasqueradeReconcile(); err != nil {
-					klog.Errorf("Masquerade reconciler error: %v", err)
+				link, err := util.GetNetLinkOps().LinkByName(gwIface)
+				if err != nil {
+					klog.Errorf("Masquerade reconciler: failed to get link for %s: %v", gwIface, err)
+					continue
 				}
+				currentIndex := link.Attrs().Index
+				ifIndexChanged := currentIndex != lastIfIndex
+				masqIPMissing := !masqueradeIPsConfigured(gwIface)
+				if !ifIndexChanged && !masqIPMissing {
+					continue // interface unchanged and masquerade IPs present, nothing to do
+				}
+				if ifIndexChanged {
+					klog.Warningf("Gateway interface %s ifindex changed (%d -> %d), restoring masquerade resources",
+						gwIface, lastIfIndex, currentIndex)
+				} else {
+					klog.Warningf("Masquerade IPs missing on %s, restoring masquerade resources", gwIface)
+				}
+				if err := ensureMasqueradeResources(g.routeManager, gwIface, g.nodeName, g.watchFactory); err != nil {
+					klog.Errorf("Masquerade reconciler error: %v", err)
+					continue // don't update lastIfIndex — will retry next tick
+				}
+				lastIfIndex = currentIndex
 			}
 		}
 	}()
-}
-
-// doMasqueradeReconcile checks if masquerade resources are present on the gateway interface
-// and restores them if missing. The masquerade IP is used as a canary — it is set last
-// by ensureMasqueradeResources, so its absence indicates either the interface was recreated
-// (e.g., DPU reboot) or a previous restore attempt failed partway through.
-// Routes are only re-added to the route manager when the canary is absent; once in the
-// store, the route manager's own sync loop keeps them applied to the kernel.
-func (g *gateway) doMasqueradeReconcile() error {
-	gwIface := config.Gateway.Interface
-	if masqueradeIPsConfigured(gwIface) {
-		return nil
-	}
-	klog.Warningf("Masquerade resources missing on %s, restoring", gwIface)
-	return ensureMasqueradeResources(g.routeManager, gwIface, g.nodeName, g.watchFactory)
 }
 
 // sets up an uplink interface for UDP Generic Receive Offload forwarding as part of
