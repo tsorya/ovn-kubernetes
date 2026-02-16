@@ -19,6 +19,7 @@ import (
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/kube"
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/node/bridgeconfig"
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/node/egressip"
+	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/node/routemanager"
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/retry"
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/types"
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/util"
@@ -63,6 +64,10 @@ type gateway struct {
 	wg           *sync.WaitGroup
 
 	nextHops []net.IP
+
+	// DPU Host mode specific fields for masquerade reconciliation
+	routeManager *routemanager.Controller
+	nodeName     string
 }
 
 func (g *gateway) AddService(svc *corev1.Service) error {
@@ -348,7 +353,43 @@ func (g *gateway) Start() error {
 		g.nodeIPManager.Run(g.stopChan, g.wg)
 	}
 
+	// Start periodic masquerade reconciliation for DPU Host mode
+	if config.OvnKubeNode.Mode == types.NodeModeDPUHost {
+		g.runMasqueradeReconciler(g.stopChan, g.wg)
+	}
+
 	return nil
+}
+
+// runMasqueradeReconciler starts a periodic loop to ensure masquerade resources
+// (IPs, routes, MAC bindings) are present on the gateway interface. This is only
+// used in DPU Host mode. It relies entirely on the idempotency of
+// ensureMasqueradeResources: each function checks existence before acting, so
+// normal ticks are lightweight no-ops. When the interface is recreated (DPU reboot)
+// or masquerade IPs are removed, the functions detect the difference and restore.
+func (g *gateway) runMasqueradeReconciler(stopChan <-chan struct{}, wg *sync.WaitGroup) {
+	if config.Gateway.Interface == "" {
+		klog.Warning("Gateway interface not configured, skipping masquerade reconciler")
+		return
+	}
+
+	const reconcilePeriod = 30 * time.Second
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		ticker := time.NewTicker(reconcilePeriod)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stopChan:
+				return
+			case <-ticker.C:
+				if err := ensureMasqueradeResources(g.routeManager, config.Gateway.Interface, g.nodeName, g.watchFactory); err != nil {
+					klog.V(5).Infof("Masquerade reconciler: %v", err)
+				}
+			}
+		}
+	}()
 }
 
 // sets up an uplink interface for UDP Generic Receive Offload forwarding as part of
