@@ -2122,6 +2122,7 @@ var ensureMasqueradeResourcesMu sync.Mutex
 func ensureMasqueradeResources(routeManager *routemanager.Controller, gwIface, nodeName string, watchFactory factory.NodeWatchFactory) error {
 	ensureMasqueradeResourcesMu.Lock()
 	defer ensureMasqueradeResourcesMu.Unlock()
+	klog.Infof("ensureMasqueradeResources: starting for interface %s", gwIface)
 	// 0. Verify interface has a primary (non-link-local, non-masquerade) IP before
 	// adding any resources. Without this check, we'd add the masquerade IP to an
 	// interface that hasn't acquired its primary IP yet (e.g., DHCP pending after
@@ -2130,10 +2131,12 @@ func ensureMasqueradeResources(routeManager *routemanager.Controller, gwIface, n
 	if err != nil {
 		return fmt.Errorf("interface %s not ready (no primary IP): %w", gwIface, err)
 	}
+	klog.Infof("ensureMasqueradeResources: interface %s has primary IPs %v", gwIface, ifAddrs)
 	// 1. Masquerade IP must be first — routes depend on it for gateway reachability
 	if err := setNodeMasqueradeIPOnExtBridge(gwIface); err != nil {
 		return fmt.Errorf("failed to set masquerade IP: %w", err)
 	}
+	klog.Infof("ensureMasqueradeResources: masquerade IP set on %s", gwIface)
 	// 2. Re-add routes with the current LinkIndex (interface may have been recreated)
 	if err := addMasqueradeRoute(routeManager, gwIface, nodeName, ifAddrs, watchFactory); err != nil {
 		return fmt.Errorf("failed to add masquerade route: %w", err)
@@ -2141,10 +2144,12 @@ func ensureMasqueradeResources(routeManager *routemanager.Controller, gwIface, n
 	if err := configureSvcRouteViaInterface(routeManager, gwIface, DummyNextHopIPs()); err != nil {
 		return fmt.Errorf("failed to configure service route: %w", err)
 	}
+	klog.Infof("ensureMasqueradeResources: routes configured on %s", gwIface)
 	// 3. Restore ARP/ND entries for masquerade IPs
 	if err := addHostMACBindings(gwIface); err != nil {
 		return fmt.Errorf("failed to add MAC bindings: %w", err)
 	}
+	klog.Infof("ensureMasqueradeResources: completed successfully for %s", gwIface)
 	return nil
 }
 
