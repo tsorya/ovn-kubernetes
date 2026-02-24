@@ -432,9 +432,11 @@ func (c *addressManager) isValidNodeIP(addr net.IP, linkIndex int) bool {
 		return false
 	}
 	// check CDN management port
-	mgmtPortAddress, _ := util.MatchFirstIPNetFamily(utilnet.IsIPv6(addr), c.mgmtPort.GetAddresses())
-	if mgmtPortAddress != nil && addr.Equal(mgmtPortAddress.IP) {
-		return false
+	if c.mgmtPort != nil {
+		mgmtPortAddress, _ := util.MatchFirstIPNetFamily(utilnet.IsIPv6(addr), c.mgmtPort.GetAddresses())
+		if mgmtPortAddress != nil && addr.Equal(mgmtPortAddress.IP) {
+			return false
+		}
 	}
 
 	if util.IsNetworkSegmentationSupportEnabled() {
