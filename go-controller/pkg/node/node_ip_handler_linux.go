@@ -173,7 +173,7 @@ func (c *addressManager) runInternal(stopChan <-chan struct{}, subscribe subscri
 				}
 				continue
 			}
-			if util.IsAddressReservedForInternalUse(a.LinkAddress.IP) {
+			if util.IsAddressReservedForInternalUse(a.LinkAddress.IP) || config.OvnKubeNode.Mode == types.NodeModeDPUHost {
 				c.OnMasqueradeIPChanged()
 				continue
 			}
@@ -186,12 +186,10 @@ func (c *addressManager) runInternal(stopChan <-chan struct{}, subscribe subscri
 
 			c.handleNodePrimaryAddrChange()
 			if addrChanged || !c.doNodeHostCIDRsMatch() {
-				if config.OvnKubeNode.Mode != types.NodeModeDPUHost {
-					klog.Infof("Host CIDRs changed to %v. Updating node address annotations.", c.cidrs)
-					err := c.updateNodeAddressAnnotations()
-					if err != nil {
-						klog.Errorf("Address Manager failed to update node address annotations: %v", err)
-					}
+				klog.Infof("Host CIDRs changed to %v. Updating node address annotations.", c.cidrs)
+				err := c.updateNodeAddressAnnotations()
+				if err != nil {
+					klog.Errorf("Address Manager failed to update node address annotations: %v", err)
 				}
 				c.OnChanged()
 			}
@@ -432,11 +430,9 @@ func (c *addressManager) isValidNodeIP(addr net.IP, linkIndex int) bool {
 		return false
 	}
 	// check CDN management port
-	if c.mgmtPort != nil {
-		mgmtPortAddress, _ := util.MatchFirstIPNetFamily(utilnet.IsIPv6(addr), c.mgmtPort.GetAddresses())
-		if mgmtPortAddress != nil && addr.Equal(mgmtPortAddress.IP) {
-			return false
-		}
+	mgmtPortAddress, _ := util.MatchFirstIPNetFamily(utilnet.IsIPv6(addr), c.mgmtPort.GetAddresses())
+	if mgmtPortAddress != nil && addr.Equal(mgmtPortAddress.IP) {
+		return false
 	}
 
 	if util.IsNetworkSegmentationSupportEnabled() {

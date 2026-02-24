@@ -485,11 +485,6 @@ func (nc *DefaultNodeNetworkController) initGatewayDPUHost() error {
 
 	gw := nc.Gateway.(*gateway)
 	gw.nodeIPManager = newAddressManager(nc.name, nc.Kube, nil, nc.watchFactory, nil)
-	gw.nodeIPManager.OnChanged = func() {
-		if err := ensureMasqueradeResources(nc.routeManager, config.Gateway.Interface, nc.name, nc.watchFactory); err != nil {
-			klog.V(5).Infof("Masquerade reconciler on addr change: %v", err)
-		}
-	}
 	if config.Gateway.NodeportEnable {
 		if err := initSharedGatewayIPTables(); err != nil {
 			return err
