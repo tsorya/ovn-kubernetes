@@ -489,7 +489,7 @@ func (c *addressManager) sync() {
 		return
 	}
 	if config.OvnKubeNode.Mode == types.NodeModeDPUHost {
-		c.OnChanged()
+		c.OnMasqueradeIPChanged()
 		return
 	}
 
@@ -531,6 +531,7 @@ func (c *addressManager) sync() {
 		}
 		c.OnChanged()
 	}
+	c.OnMasqueradeIPChanged()
 }
 
 // getSecondaryHostEgressIPs returns the set of egress IPs that are assigned to standard linux interfaces (non ovs type). The

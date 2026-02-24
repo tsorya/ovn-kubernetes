@@ -950,6 +950,17 @@ func (nc *DefaultNodeNetworkController) Start(ctx context.Context) error {
 	if err := waiter.Wait(); err != nil {
 		return err
 	}
+	// Set masquerade IP reconciliation callback — same for all modes.
+	// When a masquerade IP is added/removed, ensureMasqueradeResources restores
+	// all masquerade resources (IPs, routes, MAC bindings) in the correct order.
+	gw := nc.Gateway.(*gateway)
+	if gw.nodeIPManager != nil {
+		gw.nodeIPManager.OnMasqueradeIPChanged = func() {
+			if err := ensureMasqueradeResources(nc.routeManager, config.Gateway.Interface, nc.name, nc.watchFactory); err != nil {
+				klog.V(5).Infof("Masquerade reconciler on masquerade IP change: %v", err)
+			}
+		}
+	}
 	err = nc.Gateway.Start()
 	if err != nil {
 		return fmt.Errorf("failed to start gateway: %w", err)

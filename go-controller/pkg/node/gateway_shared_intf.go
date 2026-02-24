@@ -1798,12 +1798,6 @@ func newGateway(
 				klog.V(5).Infof("Masquerade reconciler on addr change: %v", err)
 			}
 		}
-		gw.nodeIPManager.OnMasqueradeIPChanged = func() {
-			if err := ensureMasqueradeResources(routeManager, config.Gateway.Interface, nodeName, watchFactory); err != nil {
-				klog.V(5).Infof("Masquerade reconciler on masquerade IP change: %v", err)
-			}
-		}
-
 		if config.Gateway.NodeportEnable {
 			klog.Info("Creating Gateway Node Port Watcher")
 			gw.nodePortWatcher, err = newNodePortWatcher(gwBridge, gw.openflowManager, gw.nodeIPManager, watchFactory, networkManager)
