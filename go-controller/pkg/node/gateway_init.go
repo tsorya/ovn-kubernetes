@@ -483,8 +483,18 @@ func (nc *DefaultNodeNetworkController) initGatewayDPUHost() error {
 	klog.Info("Initializing Shared Gateway Functionality for Gateway Start on DPU host")
 	var err error
 
-	// TODO(adrianc): revisit if support for nodeIPManager is needed.
 	gw := nc.Gateway.(*gateway)
+	gw.nodeIPManager = newAddressManager(nc.name, nc.Kube, nil, nc.watchFactory, nil)
+	gw.nodeIPManager.OnChanged = func() {
+		if err := ensureMasqueradeResources(nc.routeManager, config.Gateway.Interface, nc.name, nc.watchFactory); err != nil {
+			klog.V(5).Infof("Masquerade reconciler on addr change: %v", err)
+		}
+	}
+	gw.nodeIPManager.OnMasqueradeIPChanged = func() {
+		if err := ensureMasqueradeResources(nc.routeManager, config.Gateway.Interface, nc.name, nc.watchFactory); err != nil {
+			klog.V(5).Infof("Masquerade reconciler on masquerade IP change: %v", err)
+		}
+	}
 	if config.Gateway.NodeportEnable {
 		if err := initSharedGatewayIPTables(); err != nil {
 			return err

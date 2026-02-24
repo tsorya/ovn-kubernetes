@@ -137,7 +137,9 @@ func (c *addressManager) Run(stopChan <-chan struct{}, doneWg *sync.WaitGroup) {
 		return
 	}
 
-	c.addHandlerForAddrChange()
+	if config.OvnKubeNode.Mode != types.NodeModeDPUHost {
+		c.addHandlerForAddrChange()
+	}
 	doneWg.Add(1)
 	go func() {
 		c.runInternal(stopChan, c.getNetlinkAddrSubFunc(stopChan))
@@ -184,10 +186,12 @@ func (c *addressManager) runInternal(stopChan <-chan struct{}, subscribe subscri
 
 			c.handleNodePrimaryAddrChange()
 			if addrChanged || !c.doNodeHostCIDRsMatch() {
-				klog.Infof("Host CIDRs changed to %v. Updating node address annotations.", c.cidrs)
-				err := c.updateNodeAddressAnnotations()
-				if err != nil {
-					klog.Errorf("Address Manager failed to update node address annotations: %v", err)
+				if config.OvnKubeNode.Mode != types.NodeModeDPUHost {
+					klog.Infof("Host CIDRs changed to %v. Updating node address annotations.", c.cidrs)
+					err := c.updateNodeAddressAnnotations()
+					if err != nil {
+						klog.Errorf("Address Manager failed to update node address annotations: %v", err)
+					}
 				}
 				c.OnChanged()
 			}
@@ -482,6 +486,10 @@ func (c *addressManager) isValidNodeIP(addr net.IP, linkIndex int) bool {
 
 func (c *addressManager) sync() {
 	if config.OvnKubeNode.Mode == types.NodeModeDPU {
+		return
+	}
+	if config.OvnKubeNode.Mode == types.NodeModeDPUHost {
+		c.OnChanged()
 		return
 	}
 
