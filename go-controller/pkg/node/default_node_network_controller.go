@@ -160,7 +160,10 @@ func newDefaultNodeNetworkController(cnnci *CommonNodeNetworkControllerInfo, sto
 		if err := c.updateGatewayMAC(link); err != nil {
 			return err
 		}
+		klog.Infof("DEBUG masquerade: linkHandler link=%s gwIface=%s gatewaySet=%v",
+			link.Attrs().Name, config.Gateway.Interface, c.Gateway != nil)
 		if c.Gateway != nil && link.Attrs().Name == config.Gateway.Interface {
+			klog.Infof("DEBUG masquerade: link event matched gateway interface, calling ensureMasqueradeResources")
 			if err := ensureMasqueradeResources(c.routeManager, config.Gateway.Interface, c.name, c.watchFactory); err != nil {
 				klog.Errorf("Masquerade reconciler on link event: %v", err)
 			}

@@ -174,6 +174,9 @@ func (c *addressManager) runInternal(stopChan <-chan struct{}, subscribe subscri
 				continue
 			}
 			if util.IsAddressReservedForInternalUse(a.LinkAddress.IP) || config.OvnKubeNode.Mode == types.NodeModeDPUHost {
+				klog.Infof("DEBUG masquerade: addr event ip=%s isAdd=%v isMasquerade=%v isDPUHost=%v, calling OnMasqueradeIPChanged",
+					a.LinkAddress.IP, a.NewAddr, util.IsAddressReservedForInternalUse(a.LinkAddress.IP),
+					config.OvnKubeNode.Mode == types.NodeModeDPUHost)
 				c.OnMasqueradeIPChanged()
 				continue
 			}

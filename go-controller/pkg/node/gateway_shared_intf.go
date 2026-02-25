@@ -2140,6 +2140,7 @@ var (
 
 func ensureMasqueradeResources(routeManager *routemanager.Controller, gwIface, nodeName string, watchFactory factory.NodeWatchFactory) error {
 	if !ensureMasqueradeResourcesMu.TryLock() {
+		klog.Infof("DEBUG masquerade: TryLock failed, another reconciliation in progress")
 		return nil
 	}
 	defer ensureMasqueradeResourcesMu.Unlock()
@@ -2150,7 +2151,10 @@ func ensureMasqueradeResources(routeManager *routemanager.Controller, gwIface, n
 	}
 
 	// Fast path: same interface (LinkIndex) and masquerade IP present — resources are healthy
-	if link.Attrs().Index == lastMasqueradeLinkIndex && masqueradeIPConfigured(link) {
+	masqConfigured := masqueradeIPConfigured(link)
+	klog.Infof("DEBUG masquerade: fast path check ifindex=%d lastSuccessful=%d masqIPConfigured=%v",
+		link.Attrs().Index, lastMasqueradeLinkIndex, masqConfigured)
+	if link.Attrs().Index == lastMasqueradeLinkIndex && masqConfigured {
 		return nil
 	}
 
