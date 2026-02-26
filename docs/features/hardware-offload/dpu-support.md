@@ -45,6 +45,38 @@ These aforementioned parts are expected to be deployed also on two different Kub
 
 For detailed configuration of gateway interfaces in DPU host mode, see [DPU Gateway Interface Configuration](dpu-gateway-interface.md).
 
+### Management Port Resilience in DPU Host Mode
+
+In DPU host mode, the management port (`ovn-k8s-mp0`) is backed by an SR-IOV VF
+netdevice. The VF is either specified directly by name
+(`ovnkube-node-mgmt-port-netdev`) or allocated from a device plugin resource pool
+(`ovnkube-node-mgmt-port-dp-resource-name`).
+
+At startup, the VF is looked up by its current interface name — which may be the
+original kernel name (e.g., `enp3s0f0v0`) or `ovn-k8s-mp0` if a previous instance
+already renamed it. It is then configured as the management port.
+
+A periodic reconciliation loop monitors the management port and re-applies its
+configuration (routes, addresses, nftables rules). If reconciliation fails — for
+example because the underlying interface has disappeared — the code attempts to
+recreate the management port from scratch.
+
+#### DPU reboot recovery
+
+When a DPU reboots while the host and its ovn-kube-node container are still running,
+all VFs on the host are destroyed and recreated by the DPU firmware. The recreated
+VFs may appear under different interface names, and a DPU firmware settings change
+can even cause the same physical port to be re-enumerated under a different PCI
+address.
+
+If the management port cannot be recreated, the ovn-kube-node process terminates.
+This is intentional: the original VF no longer exists, and a DPU firmware settings
+change can cause the same physical port to be re-enumerated under a different PCI
+address, so there is no reliable way to determine which of the newly created VFs
+should be used for the management port. The only safe recovery is a container
+restart, which allows the device plugin to re-allocate the correct VF from its
+resource pool.
+
 ### DPU Cluster
 ---
 
