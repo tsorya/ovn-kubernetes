@@ -237,20 +237,29 @@ func setupManagementPortIPFamilyConfig(link netlink.Link, mpcfg *managementPortC
 		return err
 	}
 
+	klog.V(4).Infof("AAAAAAA , ifindex %d", link.Attrs().Index)
 	// now check for addition of any missing routes
 	for _, subnet := range cfg.clusterSubnets {
 		route, err := util.LinkRouteGetByDstAndGw(link, cfg.gwIP, subnet)
 		if err != nil || route == nil {
 			// we need to warn so that it can be debugged as to why routes are incorrect
-			klog.Warningf("Missing or unable to find route entry for subnet %s via gateway %s on link %v with MTU: %d", subnet, cfg.gwIP, ifName, config.Default.RoutableMTU)
+			klog.Warningf("Missing or unable to find route entry for subnet %s via gateway %s on link %v (ifindex %d) with MTU: %d",
+				subnet, cfg.gwIP, ifName, link.Attrs().Index, config.Default.RoutableMTU)
+		} else {
+			klog.V(4).Infof("Route entry exists for subnet %s via gateway %s on link %v (ifindex %d)", subnet, cfg.gwIP, ifName, link.Attrs().Index)
 		}
 
 		subnetCopy := *subnet
 		err = routeManager.Add(netlink.Route{LinkIndex: link.Attrs().Index, Gw: cfg.gwIP, Dst: &subnetCopy, MTU: config.Default.RoutableMTU})
 		if err != nil {
-			klog.Warningf("Could not add route entry for subnet %s via gateway %s: %v", subnet, cfg.gwIP, err)
+			klog.Warningf("Could not add route entry for subnet %s via gateway %s on link %v (ifindex %d): %v",
+				subnet, cfg.gwIP, ifName, link.Attrs().Index, err)
+		} else if route == nil {
+			klog.V(4).Infof("Route manager accepted route for subnet %s via gateway %s on link %v (ifindex %d) but route was previously missing — may already be in store",
+				subnet, cfg.gwIP, ifName, link.Attrs().Index)
 		}
 	}
+	klog.V(4).Infof("BBBBB , ifindex %d", link.Attrs().Index)
 
 	// Add a neighbour entry on the K8s node to map routerIP with routerMAC. This is
 	// required because in certain cases ARP requests from the K8s Node to the routerIP

@@ -4,6 +4,7 @@
 package managementport
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"time"
@@ -17,6 +18,8 @@ import (
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/types"
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/util"
 )
+
+var errMgmtPortLinkNotFound = errors.New("management port netdev link not found")
 
 type managementPortRepresentor struct {
 	cfg        *managementPortConfig
@@ -124,6 +127,9 @@ func (mp *managementPortNetdev) create() error {
 	klog.V(5).Infof("Lookup netdevice link and existing management port using '%v'", mp.netdevDevName)
 	link, err := util.GetNetLinkOps().LinkByName(mp.netdevDevName)
 	if err != nil {
+		if util.GetNetLinkOps().IsLinkNotFoundError(err) {
+			return fmt.Errorf("%w: %v", errMgmtPortLinkNotFound, err)
+		}
 		return err
 	}
 
@@ -167,15 +173,18 @@ func (mp *managementPortNetdev) doReconcile() error {
 	if err := createPlatformManagementPort(mp.ifName, mp.cfg, mp.routeManager); err != nil {
 		klog.Warningf("Failed to reconcile management port netdev, attempting to recreate: %v", err)
 		if err := mp.create(); err != nil {
-			// The management port VF has disappeared and cannot be found
-			// by its known name. For example, a DPU reboot while the host
-			// container is still running destroys all VFs and recreates
-			// them from scratch — potentially under different names or
-			// PCI addresses (e.g., after a firmware settings change).
-			// We cannot safely pick a replacement VF at runtime; only a
-			// container restart allows the device plugin to re-allocate
-			// the correct device.
-			klog.Fatalf("Failed to recreate management port netdev, terminating so device plugin can re-allocate the correct VF on restart: %v", err)
+			if errors.Is(err, errMgmtPortLinkNotFound) {
+				// The management port VF has disappeared and cannot be found
+				// by its known name. For example, a DPU reboot while the host
+				// container is still running destroys all VFs and recreates
+				// them from scratch — potentially under different names or
+				// PCI addresses (e.g., after a firmware settings change).
+				// We cannot safely pick a replacement VF at runtime; only a
+				// container restart allows the device plugin to re-allocate
+				// the correct device.
+				klog.Fatalf("Failed to recreate management port netdev, terminating so device plugin can re-allocate the correct VF on restart: %v", err)
+			}
+			return fmt.Errorf("failed to recreate management port: %w", err)
 		}
 	}
 	return nil

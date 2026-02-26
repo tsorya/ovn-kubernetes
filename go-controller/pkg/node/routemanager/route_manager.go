@@ -104,7 +104,7 @@ func (c *Controller) addRoute(r *netlink.Route) error {
 		return err
 	}
 	if c.hasRouteInStore(r) {
-		// already managed - nothing to do
+		klog.V(4).Infof("Route Manager: route %s already in store (ifindex %d), skipping add", r, r.LinkIndex)
 		return nil
 	}
 	err = c.netlinkAddRoute(r)
@@ -147,7 +147,12 @@ func (c *Controller) processNetlinkEvent(ru netlink.RouteUpdate) error {
 	if r == nil {
 		return nil
 	}
-	if ru.Type == unix.RTM_DELROUTE || !routePartiallyEqualWantedToExisting(r, &ru.Route) {
+	if ru.Type == unix.RTM_DELROUTE {
+		klog.V(4).Infof("Route Manager: detected deletion of managed route %s (ifindex %d), re-adding stored route (ifindex %d)", &ru.Route, ru.Route.LinkIndex, r.LinkIndex)
+		return c.netlinkAddRoute(r)
+	}
+	if !routePartiallyEqualWantedToExisting(r, &ru.Route) {
+		klog.V(4).Infof("Route Manager: managed route %s changed unexpectedly, re-adding stored route (ifindex %d)", &ru.Route, r.LinkIndex)
 		return c.netlinkAddRoute(r)
 	}
 	return nil
