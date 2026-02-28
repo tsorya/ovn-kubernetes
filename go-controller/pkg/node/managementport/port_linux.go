@@ -90,7 +90,12 @@ func NewManagementPortController(
 		c.ports[ovsPort] = newManagementPortOVS(cfg, routeManager)
 	}
 	if hasNetdev {
-		c.ports[netdevPort] = newManagementPortNetdev(netdevDevName, cfg, routeManager)
+		deviceID, err := util.GetDeviceIDFromNetdevice(netdevDevName)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get PCI device ID for %s: %v", netdevDevName, err)
+		}
+		klog.Infof("Management port PCI device ID: %s (from netdev %s)", deviceID, netdevDevName)
+		c.ports[netdevPort] = newManagementPortNetdev(deviceID, cfg, routeManager)
 	}
 	if hasRepresentor {
 		ifName := types.K8sMgmtIntfName

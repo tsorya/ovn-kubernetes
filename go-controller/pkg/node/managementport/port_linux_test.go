@@ -1171,8 +1171,18 @@ var _ = Describe("Management Port tests", func() {
 	})
 
 	Context("NewManagementPortController creates a controller according to config.OvnKubeNode.Mode", func() {
+		var origFsOps util.FileSystemOps
+
 		BeforeEach(func() {
 			Expect(config.PrepareTestConfig()).To(Succeed())
+			origFsOps = util.GetFileSystemOps()
+			mockFsOps := &utilMocks.FileSystemOps{}
+			mockFsOps.On("Readlink", mock.AnythingOfType("string")).Return("../../0000:03:00.2", nil)
+			util.SetFileSystemOps(mockFsOps)
+		})
+
+		AfterEach(func() {
+			util.SetFileSystemOps(origFsOps)
 		})
 
 		node := &corev1.Node{
@@ -1217,7 +1227,7 @@ var _ = Describe("Management Port tests", func() {
 			Expect(mgmtPortImpl.ports[netdevPort]).ToNot(BeNil())
 			Expect(mgmtPortImpl.ports[representorPort]).To(BeNil())
 			netdevImpl := mgmtPortImpl.ports[netdevPort].(*managementPortNetdev)
-			Expect(netdevImpl.netdevDevName).To(Equal(netdevName))
+			Expect(netdevImpl.deviceID).To(Equal("0000:03:00.2"))
 		})
 		It("Creates managementPortNetdev and managementPortRepresentor for Ovnkube Node mode full", func() {
 			config.OvnKubeNode.MgmtPortNetdev = netdevName
@@ -1228,7 +1238,7 @@ var _ = Describe("Management Port tests", func() {
 			Expect(mgmtPortImpl.ports[netdevPort]).ToNot(BeNil())
 			Expect(mgmtPortImpl.ports[representorPort]).ToNot(BeNil())
 			netdevImpl := mgmtPortImpl.ports[netdevPort].(*managementPortNetdev)
-			Expect(netdevImpl.netdevDevName).To(Equal(netdevName))
+			Expect(netdevImpl.deviceID).To(Equal("0000:03:00.2"))
 			repImpl := mgmtPortImpl.ports[representorPort].(*managementPortRepresentor)
 			Expect(repImpl.repDevName).To(Equal(rep))
 		})
