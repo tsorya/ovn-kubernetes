@@ -12,6 +12,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 
+	"github.com/ovn-kubernetes/ovn-kubernetes/go-controller/pkg/config"
 	"github.com/ovn-kubernetes/ovn-kubernetes/go-controller/pkg/networkmanager"
 	"github.com/ovn-kubernetes/ovn-kubernetes/go-controller/pkg/types"
 	"github.com/ovn-kubernetes/ovn-kubernetes/go-controller/pkg/util"
@@ -234,15 +235,23 @@ func (p *UserDefinedPrimaryNetwork) ensureNetworkDevice(pod *corev1.Pod) error {
 	}
 	p.deviceID = deviceID
 
-	deviceInfo, err := nadutils.LoadDeviceInfoFromDP(p.resourceName, deviceID)
-	if err != nil {
-		return fmt.Errorf("failed to load primary UDN's device info for pod %s/%s resource %s deviceID %s: %w",
-			pod.Namespace, pod.Name, p.resourceName, deviceID, err)
+	if config.OvnKubeNode.Mode == types.NodeModeDPUHost {
+		// In DPU-host mode, the device info file from the device plugin is not
+		// available (the SR-IOV device plugin does not write it in DPF setups).
+		// It is also not needed: the DPU handles OVS plumbing via representors,
+		// and the netdev name can be resolved directly from sysfs.
+		p.deviceInfo = &nadapi.DeviceInfo{}
+	} else {
+		deviceInfo, err := nadutils.LoadDeviceInfoFromDP(p.resourceName, deviceID)
+		if err != nil {
+			return fmt.Errorf("failed to load primary UDN's device info for pod %s/%s resource %s deviceID %s: %w",
+				pod.Namespace, pod.Name, p.resourceName, deviceID, err)
+		}
+		p.deviceInfo = deviceInfo
 	}
-	p.deviceInfo = deviceInfo
 
 	if !p.isVFIO {
-		netdevName, err := util.GetNetdevNameFromDeviceId(deviceID, *deviceInfo)
+		netdevName, err := util.GetNetdevNameFromDeviceId(deviceID, *p.deviceInfo)
 		if err != nil {
 			return fmt.Errorf("failed to get primary UDN's netdev name for pod %s/%s resource %s deviceID %s: %w",
 				pod.Namespace, pod.Name, p.resourceName, deviceID, err)
