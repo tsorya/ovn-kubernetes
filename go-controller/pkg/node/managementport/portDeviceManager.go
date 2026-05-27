@@ -85,8 +85,15 @@ func (mpdm *MgmtPortDeviceManager) Init() error {
 				}
 			}
 			if deviceId == "" {
-				return fmt.Errorf("failed to find match manage port device %v of resource %s for network %s",
+				// The VF was moved to a different resource pool or is no
+				// longer available with the same PfId/FuncId. Discard this
+				// stale reservation; a fresh allocation will happen later
+				// via AllocateDeviceIDForNetwork.
+				klog.Warningf("Could not find matching manage port device %v of resource %s for network %s; discarding stale reservation",
 					annotatedMgmtPortDetails, mpdm.deviceAllocator.ResourceName(), network)
+				delete(annotatedMgmtPortDetailsMap, network)
+				annotationNeedUpdate = true
+				continue
 			}
 			err = mpdm.deviceAllocator.ReserveResourcesDeviceIDByDeviceID(network, deviceId)
 			if err != nil {
