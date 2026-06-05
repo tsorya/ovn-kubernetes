@@ -312,7 +312,7 @@ func testManagementPort(ctx *cli.Context, fexec *ovntest.FakeExec, testNS ns.Net
 
 		netdevName, rep := "", ""
 
-		mgmtPortController, err := NewManagementPortController(nil, &existingNode, nodeSubnetCIDRs, netdevName, rep, rm, netInfo)
+		mgmtPortController, err := NewManagementPortController(nil, &existingNode, nodeSubnetCIDRs, netdevName, rep, rm, netInfo, nil)
 		Expect(err).NotTo(HaveOccurred())
 		stop := make(chan struct{})
 		err = mgmtPortController.Start(stop)
@@ -410,7 +410,7 @@ func testManagementPortDPU(ctx *cli.Context, fexec *ovntest.FakeExec, testNS ns.
 
 		netdevName, rep := "pf0vf0", "pf0vf0"
 
-		mgmtPortController, err := NewManagementPortController(nil, node, nodeSubnetCIDRs, netdevName, rep, rm, netInfo)
+		mgmtPortController, err := NewManagementPortController(nil, node, nodeSubnetCIDRs, netdevName, rep, rm, netInfo, nil)
 		Expect(err).NotTo(HaveOccurred())
 		stop := make(chan struct{})
 		err = mgmtPortController.Start(stop)
@@ -519,7 +519,7 @@ func testManagementPortDPUHost(ctx *cli.Context, fexec *ovntest.FakeExec, testNS
 
 		netdevName, rep := "pf0vf0", ""
 
-		mgmtPortController, err := NewManagementPortController(nil, node, nodeSubnetCIDRs, netdevName, rep, rm, netInfo)
+		mgmtPortController, err := NewManagementPortController(nil, node, nodeSubnetCIDRs, netdevName, rep, rm, netInfo, nil)
 		Expect(err).NotTo(HaveOccurred())
 		stop := make(chan struct{})
 		err = mgmtPortController.Start(stop)
@@ -1251,7 +1251,7 @@ var _ = Describe("Management Port tests", func() {
 		netInfo.On("GetNodeGatewayIP", hostSubnets[0]).Return(util.GetNodeGatewayIfAddr(hostSubnets[0]))
 		netInfo.On("GetNodeManagementIP", hostSubnets[0]).Return(util.GetNodeManagementIfAddr(hostSubnets[0]))
 		It("Creates managementPort by default", func() {
-			mgmtPort, err := NewManagementPortController(nil, node, hostSubnets, netdevName, rep, nil, netInfo)
+			mgmtPort, err := NewManagementPortController(nil, node, hostSubnets, netdevName, rep, nil, netInfo, nil)
 			Expect(err).NotTo(HaveOccurred())
 			mgmtPortImpl := mgmtPort.(*managementPortController)
 			Expect(mgmtPortImpl.ports[ovsPort]).ToNot(BeNil())
@@ -1260,7 +1260,7 @@ var _ = Describe("Management Port tests", func() {
 		})
 		It("Creates managementPortRepresentor for Ovnkube Node mode dpu", func() {
 			config.OvnKubeNode.Mode = types.NodeModeDPU
-			mgmtPort, err := NewManagementPortController(nil, node, hostSubnets, netdevName, rep, nil, netInfo)
+			mgmtPort, err := NewManagementPortController(nil, node, hostSubnets, netdevName, rep, nil, netInfo, nil)
 			Expect(err).NotTo(HaveOccurred())
 			mgmtPortImpl := mgmtPort.(*managementPortController)
 			Expect(mgmtPortImpl.ports[ovsPort]).To(BeNil())
@@ -1273,7 +1273,7 @@ var _ = Describe("Management Port tests", func() {
 			config.OvnKubeNode.Mode = types.NodeModeDPUHost
 			nodeWithAnnotation := node.DeepCopy()
 			nodeWithAnnotation.Annotations[util.OvnNodeManagementPort] = `{"default":{"DeviceId":"0000:05:00.7","PfId":1,"FuncId":3}}`
-			mgmtPort, err := NewManagementPortController(nil, nodeWithAnnotation, hostSubnets, netdevName, rep, nil, netInfo)
+			mgmtPort, err := NewManagementPortController(nil, nodeWithAnnotation, hostSubnets, netdevName, rep, nil, netInfo, nil)
 			Expect(err).NotTo(HaveOccurred())
 			mgmtPortImpl := mgmtPort.(*managementPortController)
 			Expect(mgmtPortImpl.ports[netdevPort]).ToNot(BeNil())
@@ -1282,7 +1282,7 @@ var _ = Describe("Management Port tests", func() {
 		})
 		It("Creates managementPortNetdev for dpu-host falling back to sysfs when annotation is missing", func() {
 			config.OvnKubeNode.Mode = types.NodeModeDPUHost
-			mgmtPort, err := NewManagementPortController(nil, node, hostSubnets, netdevName, rep, nil, netInfo)
+			mgmtPort, err := NewManagementPortController(nil, node, hostSubnets, netdevName, rep, nil, netInfo, nil)
 			Expect(err).NotTo(HaveOccurred())
 			mgmtPortImpl := mgmtPort.(*managementPortController)
 			Expect(mgmtPortImpl.ports[ovsPort]).To(BeNil())
@@ -1295,7 +1295,7 @@ var _ = Describe("Management Port tests", func() {
 			config.OvnKubeNode.Mode = types.NodeModeDPUHost
 			config.OvnKubeNode.SimulateDPU = true
 			simNetdev := "eth0-1"
-			mgmtPort, err := NewManagementPortController(nil, node, hostSubnets, simNetdev, rep, nil, netInfo)
+			mgmtPort, err := NewManagementPortController(nil, node, hostSubnets, simNetdev, rep, nil, netInfo, nil)
 			Expect(err).NotTo(HaveOccurred())
 			mgmtPortImpl := mgmtPort.(*managementPortController)
 			netdevImpl := mgmtPortImpl.ports[netdevPort].(*managementPortNetdev)
@@ -1308,7 +1308,7 @@ var _ = Describe("Management Port tests", func() {
 			mockFsOpsFail.On("Readlink", mock.AnythingOfType("string")).Return("", fmt.Errorf("no such file"))
 			util.SetFileSystemOps(mockFsOpsFail)
 
-			_, err := NewManagementPortController(nil, node, hostSubnets, netdevName, rep, nil, netInfo)
+			_, err := NewManagementPortController(nil, node, hostSubnets, netdevName, rep, nil, netInfo, nil)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to get PCI device ID"))
 		})
@@ -1316,7 +1316,7 @@ var _ = Describe("Management Port tests", func() {
 			config.OvnKubeNode.MgmtPortNetdev = netdevName
 			nodeWithAnnotation := node.DeepCopy()
 			nodeWithAnnotation.Annotations[util.OvnNodeManagementPort] = `{"default":{"DeviceId":"0000:05:00.7","PfId":1,"FuncId":3}}`
-			mgmtPort, err := NewManagementPortController(nil, nodeWithAnnotation, hostSubnets, netdevName, rep, nil, netInfo)
+			mgmtPort, err := NewManagementPortController(nil, nodeWithAnnotation, hostSubnets, netdevName, rep, nil, netInfo, nil)
 			Expect(err).NotTo(HaveOccurred())
 			mgmtPortImpl := mgmtPort.(*managementPortController)
 			Expect(mgmtPortImpl.ports[ovsPort]).To(BeNil())
@@ -1329,7 +1329,7 @@ var _ = Describe("Management Port tests", func() {
 		})
 		It("Creates managementPortNetdev and managementPortRepresentor for full mode falling back to sysfs", func() {
 			config.OvnKubeNode.MgmtPortNetdev = netdevName
-			mgmtPort, err := NewManagementPortController(nil, node, hostSubnets, netdevName, rep, nil, netInfo)
+			mgmtPort, err := NewManagementPortController(nil, node, hostSubnets, netdevName, rep, nil, netInfo, nil)
 			Expect(err).NotTo(HaveOccurred())
 			mgmtPortImpl := mgmtPort.(*managementPortController)
 			Expect(mgmtPortImpl.ports[ovsPort]).To(BeNil())

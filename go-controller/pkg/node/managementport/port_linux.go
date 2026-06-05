@@ -18,6 +18,7 @@ import (
 	"github.com/vishvananda/netlink"
 
 	corev1 "k8s.io/api/core/v1"
+	listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/klog/v2"
 	utilnet "k8s.io/utils/net"
 	"sigs.k8s.io/knftables"
@@ -68,6 +69,7 @@ func NewManagementPortController(
 	repDevName string,
 	routeManager *routemanager.Controller,
 	netInfo util.NetInfo,
+	nodeLister listers.NodeLister,
 ) (Controller, error) {
 	cfg, err := newManagementPortConfig(node, hostSubnets, netInfo)
 	if err != nil {
@@ -128,7 +130,7 @@ func NewManagementPortController(
 		if hasNetdev {
 			ifName += "_0"
 		}
-		c.ports[representorPort] = newManagementPortRepresentor(ifName, repDevName, cfg, ovsClient)
+		c.ports[representorPort] = newManagementPortRepresentor(ifName, repDevName, cfg, ovsClient, nodeLister)
 	}
 
 	// setup NFT sets early as gateway initialization depends on it

@@ -15,6 +15,7 @@ import (
 	nadapi "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 	"github.com/vishvananda/netlink"
 
+	listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/klog/v2"
 
 	libovsdbclient "github.com/ovn-kubernetes/libovsdb/client"
@@ -34,18 +35,24 @@ type managementPortRepresentor struct {
 	repDevName string
 	link       netlink.Link
 	ovsClient  libovsdbclient.Client
+	nodeLister listers.NodeLister
+	pfId       int
+	funcId     int
 }
 
 // newManagementPortRepresentor creates a new managementPort representor
 // For management port representor only.
 // name is types.K8sMgmtIntfName (on dpu mode node) or types.K8sMgmtIntfName+"_0" (on full mode)
 // repDevName is the representor VF device name
-func newManagementPortRepresentor(name, repDevName string, cfg *managementPortConfig, ovsClient libovsdbclient.Client) *managementPortRepresentor {
+func newManagementPortRepresentor(name, repDevName string, cfg *managementPortConfig, ovsClient libovsdbclient.Client, nodeLister listers.NodeLister) *managementPortRepresentor {
 	return &managementPortRepresentor{
 		cfg:        cfg,
 		ifName:     name,
 		repDevName: repDevName,
 		ovsClient:  ovsClient,
+		nodeLister: nodeLister,
+		pfId:       -1,
+		funcId:     -1,
 	}
 }
 
@@ -81,6 +88,20 @@ func (mp *managementPortRepresentor) create() error {
 	}
 
 	mp.link = link
+
+	// Store the initial PfId/FuncId from the node annotation so the reconciliation
+	// loop can detect when the DPU-host side re-allocates a different VF.
+	if mp.nodeLister != nil && mp.cfg != nil {
+		if node, err := mp.nodeLister.Get(mp.cfg.nodeName); err == nil {
+			if cfgs, err := util.ParseNodeManagementPortAnnotation(node); err == nil {
+				if devCfg, ok := cfgs[types.DefaultNetworkName]; ok {
+					mp.pfId = devCfg.PfId
+					mp.funcId = devCfg.FuncId
+					klog.V(5).Infof("Management port representor tracking annotation: PfId=%d, FuncId=%d", mp.pfId, mp.funcId)
+				}
+			}
+		}
+	}
 	return nil
 }
 
@@ -112,7 +133,66 @@ func (mp *managementPortRepresentor) reconcilePeriod() time.Duration {
 }
 
 func (mp *managementPortRepresentor) doReconcile() error {
-	return mp.checkRepresentorPortHealth()
+	if err := mp.checkRepresentorPortHealth(); err != nil {
+		return err
+	}
+	return mp.checkRepresentorAnnotationChange(types.DefaultNetworkName)
+}
+
+// checkRepresentorAnnotationChange re-reads the node-mgmt-port annotation and
+// detects when the DPU-host has re-allocated a different VF for the management
+// port. When a change is detected the old representor is removed from OVS and
+// the new one is plumbed in its place.
+func (mp *managementPortRepresentor) checkRepresentorAnnotationChange(network string) error {
+	if mp.nodeLister == nil || mp.cfg == nil || mp.pfId == -1 {
+		return nil
+	}
+
+	node, err := mp.nodeLister.Get(mp.cfg.nodeName)
+	if err != nil {
+		return fmt.Errorf("failed to get node %s: %w", mp.cfg.nodeName, err)
+	}
+
+	cfgs, err := util.ParseNodeManagementPortAnnotation(node)
+	if err != nil {
+		return nil
+	}
+	devCfg, ok := cfgs[network]
+	if !ok {
+		return nil
+	}
+
+	if devCfg.PfId == mp.pfId && devCfg.FuncId == mp.funcId {
+		return nil
+	}
+
+	klog.Infof("Management port representor VF changed for network %s: PfId %d->%d, FuncId %d->%d, re-plumbing",
+		network, mp.pfId, devCfg.PfId, mp.funcId, devCfg.FuncId)
+
+	// Delete old representor from OVS
+	if err := DeleteManagementPortRepInterface(network, mp.ifName, mp.repDevName); err != nil {
+		klog.Warningf("Failed to delete stale representor %s for network %s: %v", mp.repDevName, network, err)
+	}
+
+	// Resolve the new representor device name
+	newRepName, err := util.GetDPUOps().GetPortRepresentor(fmt.Sprintf("%d", devCfg.PfId), fmt.Sprintf("%d", devCfg.FuncId))
+	if err != nil {
+		return fmt.Errorf("failed to get new representor for PfId=%d FuncId=%d network %s: %w",
+			devCfg.PfId, devCfg.FuncId, network, err)
+	}
+
+	mp.repDevName = newRepName
+	mp.pfId = devCfg.PfId
+	mp.funcId = devCfg.FuncId
+
+	// Re-create the representor configuration
+	if err := mp.create(); err != nil {
+		return fmt.Errorf("failed to re-create management port representor for network %s: %w", network, err)
+	}
+
+	klog.Infof("Management port representor re-plumbed for network %s: new representor %s (PfId=%d, FuncId=%d)",
+		network, mp.repDevName, mp.pfId, mp.funcId)
+	return nil
 }
 
 type managementPortNetdev struct {

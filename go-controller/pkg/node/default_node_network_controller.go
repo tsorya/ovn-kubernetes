@@ -23,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
+	listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/klog/v2"
 	utilnet "k8s.io/utils/net"
@@ -703,6 +704,7 @@ func createNodeManagementPortController(
 	nodeAnnotator kube.Annotator,
 	routeManager *routemanager.Controller,
 	netInfo util.NetInfo,
+	wf factory.NodeWatchFactory,
 ) (managementport.Controller, error) {
 	netdevName, rep, err := getMgmtPortAndRepName(node)
 	if err != nil {
@@ -719,7 +721,11 @@ func createNodeManagementPortController(
 			return nil, err
 		}
 	}
-	return managementport.NewManagementPortController(ovsClient, node, subnets, netdevName, rep, routeManager, netInfo)
+	var nodeLister listers.NodeLister
+	if wf != nil {
+		nodeLister = wf.NodeCoreInformer().Lister()
+	}
+	return managementport.NewManagementPortController(ovsClient, node, subnets, netdevName, rep, routeManager, netInfo, nodeLister)
 }
 
 // getOVNSBZone returns the zone name stored in the Southbound db.
@@ -887,6 +893,7 @@ func (nc *DefaultNodeNetworkController) Init(ctx context.Context) error {
 		nodeAnnotator,
 		nc.routeManager,
 		nc.GetNetInfo(),
+		nc.watchFactory,
 	)
 	if err != nil {
 		return err

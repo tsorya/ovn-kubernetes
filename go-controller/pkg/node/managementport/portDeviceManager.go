@@ -88,8 +88,19 @@ func (mpdm *MgmtPortDeviceManager) Init() error {
 				}
 			}
 			if deviceId == "" {
-				return fmt.Errorf("failed to find match manage port device %v of resource %s for network %s",
-					annotatedMgmtPortDetails, mpdm.deviceAllocator.ResourceName(), network)
+				// VF not found in the resource pool. This can happen when:
+				// - The network was deleted and its VF moved to a different pool
+				// - The device plugin reshuffled VFs between pools
+				// Don't crash: remove from local map so AllocateDeviceIDForNetwork can
+				// re-allocate if the network is still valid, or SyncManagementPorts
+				// will clean the annotation if the network is stale.
+				// The annotation is updated to remove the stale entry; the DPU-side
+				// reconciliation loop will detect the change and re-plumb.
+				klog.Warningf("Could not find management port VF for network %s (annotated: %v, resource: %s): "+
+					"removing stale entry, will be re-allocated if network is still valid", network, annotatedMgmtPortDetails, mpdm.deviceAllocator.ResourceName())
+				delete(annotatedMgmtPortDetailsMap, network)
+				annotationNeedUpdate = true
+				continue
 			}
 			err = mpdm.deviceAllocator.ReserveResourcesDeviceIDByDeviceID(network, deviceId)
 			if err != nil {

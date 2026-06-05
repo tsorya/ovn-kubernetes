@@ -121,7 +121,7 @@ var _ = Describe("Mananagement port DPU tests", func() {
 		})
 
 		It("Fails if set Name to ovn-k8s-mp0 fails", func() {
-			mgmtPortDpu := newManagementPortRepresentor(types.K8sMgmtIntfName+"_0", "enp3s0f0v0", nil, ovsClient)
+			mgmtPortDpu := newManagementPortRepresentor(types.K8sMgmtIntfName+"_0", "enp3s0f0v0", nil, ovsClient, nil)
 			linkMock := &mocks.Link{}
 			linkMock.On("Attrs").Return(&netlink.LinkAttrs{Name: "enp3s0f0v0", MTU: 1400})
 
@@ -156,7 +156,7 @@ var _ = Describe("Mananagement port DPU tests", func() {
 				nodeName:    "k8s-worker0",
 				hostSubnets: []*net.IPNet{ipnet},
 			}
-			mgmtPortDpu := newManagementPortRepresentor(types.K8sMgmtIntfName+"_0", "enp3s0f0v0", cfg, ovsClient)
+			mgmtPortDpu := newManagementPortRepresentor(types.K8sMgmtIntfName+"_0", "enp3s0f0v0", cfg, ovsClient, nil)
 			nodeAnnotatorMock.On("Set", mock.Anything, map[string]string{"default": expectedMgmtPortMac.String()}).Return(nil)
 			linkMock := &mocks.Link{}
 			linkMock.On("Attrs").Return(&netlink.LinkAttrs{Name: "enp3s0f0v0", MTU: 1500})
@@ -211,7 +211,7 @@ var _ = Describe("Mananagement port DPU tests", func() {
 				nodeName:    "k8s-worker0",
 				hostSubnets: []*net.IPNet{ipnet},
 			}
-			mgmtPortDpu := newManagementPortRepresentor(types.K8sMgmtIntfName+"_0", "enp3s0f0v0", cfg, ovsClient)
+			mgmtPortDpu := newManagementPortRepresentor(types.K8sMgmtIntfName+"_0", "enp3s0f0v0", cfg, ovsClient, nil)
 			nodeAnnotatorMock.On("Set", mock.Anything, map[string]string{"default": expectedMgmtPortMac.String()}).Return(nil)
 			linkMock := &mocks.Link{}
 			linkMock.On("Attrs").Return(&netlink.LinkAttrs{Name: types.K8sMgmtIntfName + "_0", MTU: config.Default.MTU})
