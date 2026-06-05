@@ -295,7 +295,7 @@ func shareGatewayInterfaceTest(app *cli.App, testNS ns.NetNS,
 		netInfo.On("GetPodNetworkAdvertisedOnNodeVRFs", nodeName).Return(nil)
 		netInfo.On("GetNodeGatewayIP", hostSubnets[0]).Return(util.GetNodeGatewayIfAddr(hostSubnets[0]))
 		netInfo.On("GetNodeManagementIP", hostSubnets[0]).Return(util.GetNodeManagementIfAddr(hostSubnets[0]))
-		mp, err := managementport.NewManagementPortController(ovsClient, &existingNode, hostSubnets, "", "", rm, netInfo)
+		mp, err := managementport.NewManagementPortController(ovsClient, &existingNode, hostSubnets, "", "", rm, netInfo, nil)
 		Expect(err).NotTo(HaveOccurred())
 
 		kubeFakeClient := fake.NewSimpleClientset(&corev1.NodeList{
@@ -1265,7 +1265,7 @@ OFPT_GET_CONFIG_REPLY (xid=0x4): frags=normal miss_send_len=0`
 		netInfo.On("GetPodNetworkAdvertisedOnNodeVRFs", nodeName).Return(nil)
 		netInfo.On("GetNodeGatewayIP", hostSubnets[0]).Return(util.GetNodeGatewayIfAddr(hostSubnets[0]))
 		netInfo.On("GetNodeManagementIP", hostSubnets[0]).Return(util.GetNodeManagementIfAddr(hostSubnets[0]))
-		mp, err := managementport.NewManagementPortController(ovsClient, &existingNode, hostSubnets, "", "", rm, netInfo)
+		mp, err := managementport.NewManagementPortController(ovsClient, &existingNode, hostSubnets, "", "", rm, netInfo, nil)
 		Expect(err).NotTo(HaveOccurred())
 
 		if util.IsNetworkSegmentationSupportEnabled() {

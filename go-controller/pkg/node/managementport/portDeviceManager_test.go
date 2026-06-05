@@ -177,7 +177,7 @@ var _ = Describe("MgmtPortDeviceManager tests", func() {
 			Expect(mpdm.mgmtPortDetails["default"].DeviceId).
 				To(Equal(matchDevice))
 		})
-		It("Fails when no PfId/FuncId match after ignoring stale DeviceId", func() {
+		It("Removes stale entry when no PfId/FuncId match after ignoring stale DeviceId", func() {
 			const (
 				staleDevice = "0000:02:01.0"
 				device1     = "0000:02:00.0"
@@ -197,8 +197,11 @@ var _ = Describe("MgmtPortDeviceManager tests", func() {
 
 			mpdm := NewMgmtPortDeviceManager(kubeMock, wf, testNodeName, allocator)
 			err := mpdm.Init()
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("failed to find match manage port device"))
+			// With the stale annotation fix, Init() succeeds gracefully
+			// by removing the stale entry. AllocateDeviceIDForNetwork or
+			// SyncManagementPorts will handle re-allocation or cleanup later.
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mpdm.mgmtPortDetails).To(BeEmpty())
 		})
 	})
 })
