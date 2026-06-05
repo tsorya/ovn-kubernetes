@@ -6,10 +6,14 @@ package managementport
 import (
 	"fmt"
 	"net"
+	"sync"
+	"time"
 
 	v1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 
+	"k8s.io/apimachinery/pkg/util/wait"
 	listers "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/util/retry"
 	"k8s.io/klog/v2"
 
 	"github.com/ovn-kubernetes/ovn-kubernetes/go-controller/pkg/config"
@@ -23,8 +27,11 @@ type udnManagementPort interface {
 }
 
 type UDNManagementPortController struct {
-	cfg   *udnManagementPortConfig
-	ports map[string]udnManagementPort
+	cfg        *udnManagementPortConfig
+	ports      map[string]udnManagementPort
+	nodeLister listers.NodeLister
+	stopCh     chan struct{}
+	stopOnce   sync.Once
 }
 
 type udnManagementPortConfig struct {
@@ -58,6 +65,7 @@ func (c *UDNManagementPortController) Create() error {
 }
 
 func (c *UDNManagementPortController) Delete() error {
+	c.Stop()
 	for _, port := range c.ports {
 		err := port.delete()
 		if err != nil {
@@ -65,6 +73,71 @@ func (c *UDNManagementPortController) Delete() error {
 		}
 	}
 	return nil
+}
+
+// Start begins the reconciliation loop for DPU-mode representor ports.
+// It periodically re-reads the node annotation to detect management port VF changes.
+func (c *UDNManagementPortController) Start(stopChan <-chan struct{}) {
+	if !config.IsModeDPU() {
+		return
+	}
+	rep, ok := c.ports[representorPort]
+	if !ok {
+		return
+	}
+	udnRep, ok := rep.(*udnManagementPortRep)
+	if !ok || udnRep.nodeLister == nil {
+		return
+	}
+
+	c.stopCh = make(chan struct{})
+	c.stopOnce = sync.Once{}
+	stopCh := c.stopCh
+	go func() {
+		reconcilePeriod := 5 * time.Second
+		timer := time.NewTicker(reconcilePeriod)
+		defer timer.Stop()
+		for {
+			select {
+			case <-stopChan:
+				return
+			case <-stopCh:
+				return
+			case <-timer.C:
+				err := retry.OnError(
+					wait.Backoff{
+						Duration: 10 * time.Millisecond,
+						Steps:    4,
+						Factor:   5.0,
+						Cap:      reconcilePeriod,
+					},
+					func(error) bool {
+						select {
+						case <-stopChan:
+							return false
+						case <-stopCh:
+							return false
+						default:
+							return true
+						}
+					},
+					udnRep.doReconcile,
+				)
+				if err != nil {
+					klog.Errorf("Failed to reconcile UDN management port representor for network %s: %v",
+						udnRep.GetNetworkName(), err)
+				}
+			}
+			timer.Reset(reconcilePeriod)
+		}
+	}()
+}
+
+// Stop halts the reconciliation loop.
+func (c *UDNManagementPortController) Stop() {
+	if c.stopCh != nil {
+		c.stopOnce.Do(func() { close(c.stopCh) })
+	}
 }
 
 // NewUDNManagementPortController creates a new management port controller for a primary UDN
@@ -109,8 +182,9 @@ func NewUDNManagementPortController(
 	}
 
 	c := &UDNManagementPortController{
-		cfg:   cfg,
-		ports: map[string]udnManagementPort{},
+		cfg:        cfg,
+		ports:      map[string]udnManagementPort{},
+		nodeLister: nodeLister,
 	}
 
 	if config.IsModeFull() && config.OvnKubeNode.MgmtPortDPResourceName == "" {
@@ -126,14 +200,14 @@ func NewUDNManagementPortController(
 				mpdev.DeviceId, netInfo.GetNetworkName(), err)
 		}
 		c.ports[netdevPort] = newUDNManagementPortNetdev(cfg, mgmtIfName, mpdev.DeviceId)
-		c.ports[representorPort] = newUDNManagementPortRep(cfg, repDeviceName)
+		c.ports[representorPort] = newUDNManagementPortRep(cfg, repDeviceName, nodeLister, mpdev.PfId, mpdev.FuncId)
 	case types.NodeModeDPU:
 		repDeviceName, err := util.GetDPUOps().GetPortRepresentor(fmt.Sprintf("%d", mpdev.PfId), fmt.Sprintf("%d", mpdev.FuncId))
 		if err != nil {
 			return nil, fmt.Errorf("failed to get management port representor for pfID %v vfID %v network %s: %v",
 				mpdev.PfId, mpdev.FuncId, netInfo.GetNetworkName(), err)
 		}
-		c.ports[representorPort] = newUDNManagementPortRep(cfg, repDeviceName)
+		c.ports[representorPort] = newUDNManagementPortRep(cfg, repDeviceName, nodeLister, mpdev.PfId, mpdev.FuncId)
 	case types.NodeModeDPUHost:
 		c.ports[netdevPort] = newUDNManagementPortNetdev(cfg, mgmtIfName, mpdev.DeviceId)
 	}
@@ -154,7 +228,10 @@ type udnManagementPortNetdev struct {
 
 type udnManagementPortRep struct {
 	udnManagementPortConfig
-	repDevice string
+	repDevice  string
+	nodeLister listers.NodeLister
+	pfId       int
+	funcId     int
 }
 
 // newUDNManagementPortOVS creates a new udnManagementPortOVS
@@ -174,11 +251,14 @@ func newUDNManagementPortNetdev(cfg *udnManagementPortConfig, ifName, deviceID s
 	}
 }
 
-// newUdnManagementPortRep creates a new udnManagementPortRep
-func newUDNManagementPortRep(cfg *udnManagementPortConfig, repDeviceName string) *udnManagementPortRep {
+// newUDNManagementPortRep creates a new udnManagementPortRep
+func newUDNManagementPortRep(cfg *udnManagementPortConfig, repDeviceName string, nodeLister listers.NodeLister, pfId, funcId int) *udnManagementPortRep {
 	return &udnManagementPortRep{
 		udnManagementPortConfig: *cfg,
 		repDevice:               repDeviceName,
+		nodeLister:              nodeLister,
+		pfId:                    pfId,
+		funcId:                  funcId,
 	}
 }
 
@@ -344,6 +424,62 @@ func (mp *udnManagementPortRep) create() error {
 
 func (mp *udnManagementPortRep) delete() error {
 	return DeleteManagementPortRepInterface(mp.GetNetworkName(), mp.repDevice, mp.repDevice)
+}
+
+// doReconcile re-reads the node-mgmt-port annotation and detects when the
+// DPU-host has re-allocated a different VF for this UDN's management port.
+// When a change is detected the old representor is removed from OVS and
+// the new one is plumbed in its place.
+func (mp *udnManagementPortRep) doReconcile() error {
+	if mp.nodeLister == nil || mp.pfId == -1 {
+		return nil
+	}
+
+	node, err := mp.nodeLister.Get(mp.nodeName)
+	if err != nil {
+		return fmt.Errorf("failed to get node %s: %w", mp.nodeName, err)
+	}
+
+	cfgs, err := util.ParseNodeManagementPortAnnotation(node)
+	if err != nil {
+		return nil
+	}
+	devCfg, ok := cfgs[mp.GetNetworkName()]
+	if !ok {
+		return nil
+	}
+
+	if devCfg.PfId == mp.pfId && devCfg.FuncId == mp.funcId {
+		return nil
+	}
+
+	klog.Infof("UDN management port representor VF changed for network %s: PfId %d->%d, FuncId %d->%d, re-plumbing",
+		mp.GetNetworkName(), mp.pfId, devCfg.PfId, mp.funcId, devCfg.FuncId)
+
+	// Delete old representor from OVS
+	if err := mp.delete(); err != nil {
+		klog.Warningf("Failed to delete stale UDN representor %s for network %s: %v", mp.repDevice, mp.GetNetworkName(), err)
+	}
+
+	// Resolve the new representor device name
+	newRepName, err := util.GetDPUOps().GetPortRepresentor(fmt.Sprintf("%d", devCfg.PfId), fmt.Sprintf("%d", devCfg.FuncId))
+	if err != nil {
+		return fmt.Errorf("failed to get new representor for PfId=%d FuncId=%d network %s: %w",
+			devCfg.PfId, devCfg.FuncId, mp.GetNetworkName(), err)
+	}
+
+	mp.repDevice = newRepName
+	mp.pfId = devCfg.PfId
+	mp.funcId = devCfg.FuncId
+
+	// Re-create the representor configuration
+	if err := mp.create(); err != nil {
+		return fmt.Errorf("failed to re-create UDN management port representor for network %s: %w", mp.GetNetworkName(), err)
+	}
+
+	klog.Infof("UDN management port representor re-plumbed for network %s: new representor %s (PfId=%d, FuncId=%d)",
+		mp.GetNetworkName(), mp.repDevice, mp.pfId, mp.funcId)
+	return nil
 }
 
 func (mp *udnManagementPortNetdev) create() error {

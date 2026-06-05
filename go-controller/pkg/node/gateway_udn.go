@@ -242,6 +242,10 @@ func (udng *UserDefinedNetworkGateway) AddNetwork() error {
 			udng.GetNetworkName(), err)
 	}
 
+	// Start the DPU-side reconciliation loop that monitors the node annotation
+	// for management port VF changes and re-plumbs the representor if needed.
+	udng.mgmtPortController.Start(udng.stopChan)
+
 	if config.IsModeDPUHost() || config.IsModeFull() {
 		mgmtPortName := util.GetNetworkScopedK8sMgmtHostIntfName(uint(udng.GetNetworkID()))
 		mplink, err := util.LinkByName(mgmtPortName)
