@@ -61,8 +61,20 @@ func (mpdm *MgmtPortDeviceManager) Init() error {
 		annotatedMgmtPortDetailsMap = util.NetworkDeviceDetailsMap{}
 	}
 
+	// Process the default network first to ensure it gets priority on device reservation.
+	processOrder := make([]string, 0, len(annotatedMgmtPortDetailsMap))
+	if _, ok := annotatedMgmtPortDetailsMap[ovntypes.DefaultNetworkName]; ok {
+		processOrder = append(processOrder, ovntypes.DefaultNetworkName)
+	}
+	for network := range annotatedMgmtPortDetailsMap {
+		if network != ovntypes.DefaultNetworkName {
+			processOrder = append(processOrder, network)
+		}
+	}
+
 	// validate the existing management port reservations:
-	for network, annotatedMgmtPortDetails := range annotatedMgmtPortDetailsMap {
+	for _, network := range processOrder {
+		annotatedMgmtPortDetails := annotatedMgmtPortDetailsMap[network]
 		deviceId := annotatedMgmtPortDetails.DeviceId
 		allDeviceIDs := mpdm.deviceAllocator.DeviceIDs()
 		if deviceId != "" && !slices.Contains(allDeviceIDs, deviceId) {
